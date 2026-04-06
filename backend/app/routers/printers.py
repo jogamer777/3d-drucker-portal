@@ -3,33 +3,35 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.models import User, Reservation, ReservationStatus, QueueEntry, QueueStatus
+from app.models.models import User, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus
 from app.routers.user import get_current_user
 from app.core.printer_client import get_all_printers, get_printer_status
-from app.core.queue_logic import get_active_reservation, get_queue_position
+from app.core.queue_logic import get_active_occupation, get_queue_position
 
 router = APIRouter(prefix="/api/printers", tags=["printers"])
 
 
 def _enrich(status: dict, db: Session, user_id: int) -> dict:
-    """Fügt Reservierungs- und Queue-Info zum Drucker-Status hinzu."""
+    """Fügt Belegungs- und Queue-Info zum Drucker-Status hinzu."""
     pid = status["id"]
     now = datetime.utcnow()
 
-    res = get_active_reservation(db, pid)
-    if res:
-        secs = max(0, int((res.expires_at - now).total_seconds()))
-        status["reservation"] = {
-            "id": res.id,
-            "is_mine": res.user_id == user_id,
-            "expires_at": res.expires_at.isoformat(),
-            "seconds_remaining": secs,
-            "minutes_remaining": secs // 60,
+    occ = get_active_occupation(db, pid)
+    if occ:
+        pickup_secs = 0
+        if occ.pickup_deadline:
+            pickup_secs = max(0, int((occ.pickup_deadline - now).total_seconds()))
+        status["occupation"] = {
+            "id": occ.id,
+            "is_mine": occ.user_id == user_id,
+            "status": occ.status.value,
+            "pickup_deadline": occ.pickup_deadline.isoformat() if occ.pickup_deadline else None,
+            "pickup_seconds_remaining": pickup_secs,
         }
     else:
-        status["reservation"] = None
+        status["occupation"] = None
 
-    # Warteschlange zählen (waiting + notified)
+    # Warteschlange zählen
     queue_count = db.query(QueueEntry).filter(
         QueueEntry.printer_id == pid,
         QueueEntry.status.in_([QueueStatus.waiting, QueueStatus.notified]),
@@ -56,7 +58,6 @@ def list_printers(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Alle konfigurierten Drucker mit Status + Reservierungsinfo."""
     statuses = get_all_printers()
     return [_enrich(s, db, current_user.id) for s in statuses]
 
@@ -67,7 +68,6 @@ def printer_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Einzelner Drucker-Status + Reservierungsinfo."""
     status = get_printer_status(printer_id)
     if status is None:
         raise HTTPException(404, "Drucker nicht gefunden")

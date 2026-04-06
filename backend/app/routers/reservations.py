@@ -1,115 +1,83 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.printer_client import PRINTERS
+from app.core.printer_client import PRINTERS, get_printer_status
 from app.core.queue_logic import (
-    get_active_reservation, get_queue_position, advance_queue,
-    AUTO_RESERVE_MINUTES,
+    get_active_occupation, get_queue_position, advance_queue,
 )
 from app.models.models import (
-    Reservation, ReservationStatus,
+    PrinterOccupation, OccupationStatus,
     QueueEntry, QueueStatus,
     User,
 )
 from app.routers.user import get_current_user
 
-router = APIRouter(prefix="/api", tags=["reservations"])
+router = APIRouter(tags=["reservations"])
 
 
-class ReservationCreate(BaseModel):
-    printer_id: str
-    duration_minutes: int   # 15 oder 30
+# ── Drucker beanspruchen / freigeben ──────────────────────────────────────────
 
-
-# ── Reservierungen ─────────────────────────────────────────────────────────────
-
-@router.post("/reservations", status_code=201)
-def create_reservation(
-    data: ReservationCreate,
+@router.post("/api/printers/{printer_id}/claim", status_code=201)
+def claim_printer(
+    printer_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if data.printer_id not in PRINTERS:
+    """Drucker beanspruchen. Phase-5-Platzhalter – in Phase 6 durch Druckstart ersetzt."""
+    if printer_id not in PRINTERS:
         raise HTTPException(400, "Unbekannter Drucker")
-    if data.duration_minutes not in (15, 30):
-        raise HTTPException(400, "Dauer muss 15 oder 30 Minuten sein")
 
-    # Bereits eine aktive Reservierung für diesen Drucker?
-    existing = get_active_reservation(db, data.printer_id)
+    # Bereits aktiv belegt?
+    existing = get_active_occupation(db, printer_id)
     if existing:
-        raise HTTPException(409, "Drucker ist bereits reserviert")
+        raise HTTPException(409, "Drucker ist bereits belegt")
 
-    # Nutzer hat bereits eine aktive Reservierung für diesen Drucker?
-    mine = db.query(Reservation).filter(
-        Reservation.printer_id == data.printer_id,
-        Reservation.user_id == current_user.id,
-        Reservation.status == ReservationStatus.active,
+    # Nutzer hat bereits eine aktive Belegung auf diesem Drucker?
+    mine = db.query(PrinterOccupation).filter(
+        PrinterOccupation.printer_id == printer_id,
+        PrinterOccupation.user_id == current_user.id,
+        PrinterOccupation.status.in_([OccupationStatus.occupied, OccupationStatus.awaiting_pickup]),
     ).first()
     if mine:
-        raise HTTPException(409, "Du hast bereits eine aktive Reservierung für diesen Drucker")
+        raise HTTPException(409, "Du hast bereits eine aktive Belegung für diesen Drucker")
 
-    now = datetime.utcnow()
-    res = Reservation(
-        printer_id=data.printer_id,
+    occ = PrinterOccupation(
+        printer_id=printer_id,
         user_id=current_user.id,
-        duration_minutes=data.duration_minutes,
-        expires_at=now + timedelta(minutes=data.duration_minutes),
     )
-    db.add(res)
+    db.add(occ)
 
     # Nutzer aus Warteschlange austragen (falls vorhanden)
     db.query(QueueEntry).filter(
-        QueueEntry.printer_id == data.printer_id,
+        QueueEntry.printer_id == printer_id,
         QueueEntry.user_id == current_user.id,
         QueueEntry.status.in_([QueueStatus.waiting, QueueStatus.notified]),
     ).update({"status": QueueStatus.cancelled})
 
     db.commit()
-    db.refresh(res)
-    return _reservation_out(res)
+    db.refresh(occ)
+    return _occupation_out(occ)
 
 
-@router.get("/reservations/my")
-def my_reservations(
+@router.post("/api/printers/{printer_id}/release")
+def release_printer(
+    printer_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Eigene aktive Reservierungen + Queue-Positionen."""
-    result = []
-    for pid in PRINTERS:
-        res = db.query(Reservation).filter(
-            Reservation.printer_id == pid,
-            Reservation.user_id == current_user.id,
-            Reservation.status == ReservationStatus.active,
-        ).first()
-        queue_entry, position = get_queue_position(db, pid, current_user.id)
-        result.append({
-            "printer_id": pid,
-            "reservation": _reservation_out(res) if res else None,
-            "queue": _queue_out(queue_entry, position) if queue_entry else None,
-        })
-    return result
-
-
-@router.delete("/reservations/{reservation_id}")
-def cancel_reservation(
-    reservation_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    res = db.query(Reservation).filter(
-        Reservation.id == reservation_id,
-        Reservation.user_id == current_user.id,
-        Reservation.status == ReservationStatus.active,
+    """Drucker freigeben (nach Abholen des Drucks). Löst Queue-Advance aus."""
+    occ = db.query(PrinterOccupation).filter(
+        PrinterOccupation.printer_id == printer_id,
+        PrinterOccupation.user_id == current_user.id,
+        PrinterOccupation.status.in_([OccupationStatus.occupied, OccupationStatus.awaiting_pickup]),
     ).first()
-    if not res:
-        raise HTTPException(404, "Reservierung nicht gefunden")
+    if not occ:
+        raise HTTPException(404, "Keine aktive Belegung für diesen Drucker")
 
-    printer_id = res.printer_id
-    res.status = ReservationStatus.cancelled
+    occ.status = OccupationStatus.released
+    occ.released_at = datetime.utcnow()
     db.commit()
 
     # Sofort Queue vorrücken
@@ -117,9 +85,32 @@ def cancel_reservation(
     return {"ok": True}
 
 
+# ── Meine Belegungen ───────────────────────────────────────────────────────────
+
+@router.get("/api/occupations/my")
+def my_occupations(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = []
+    for pid in PRINTERS:
+        occ = db.query(PrinterOccupation).filter(
+            PrinterOccupation.printer_id == pid,
+            PrinterOccupation.user_id == current_user.id,
+            PrinterOccupation.status.in_([OccupationStatus.occupied, OccupationStatus.awaiting_pickup]),
+        ).first()
+        queue_entry, position = get_queue_position(db, pid, current_user.id)
+        result.append({
+            "printer_id": pid,
+            "occupation": _occupation_out(occ) if occ else None,
+            "queue": _queue_out(queue_entry, position) if queue_entry else None,
+        })
+    return result
+
+
 # ── Warteschlange ──────────────────────────────────────────────────────────────
 
-@router.post("/queue/{printer_id}", status_code=201)
+@router.post("/api/queue/{printer_id}", status_code=201)
 def join_queue(
     printer_id: str,
     db: Session = Depends(get_db),
@@ -137,19 +128,15 @@ def join_queue(
     if existing:
         raise HTTPException(409, "Du bist bereits in der Warteschlange")
 
-    # Bereits eigene Reservierung?
-    if get_active_reservation(db, printer_id) and \
-       db.query(Reservation).filter(
-           Reservation.printer_id == printer_id,
-           Reservation.user_id == current_user.id,
-           Reservation.status == ReservationStatus.active,
-       ).first():
-        raise HTTPException(409, "Du hast bereits eine aktive Reservierung")
+    # Eigene aktive Belegung?
+    if db.query(PrinterOccupation).filter(
+        PrinterOccupation.printer_id == printer_id,
+        PrinterOccupation.user_id == current_user.id,
+        PrinterOccupation.status.in_([OccupationStatus.occupied, OccupationStatus.awaiting_pickup]),
+    ).first():
+        raise HTTPException(409, "Du hast bereits eine aktive Belegung – freigeben zuerst")
 
-    entry = QueueEntry(
-        printer_id=printer_id,
-        user_id=current_user.id,
-    )
+    entry = QueueEntry(printer_id=printer_id, user_id=current_user.id)
     db.add(entry)
     db.commit()
     db.refresh(entry)
@@ -158,7 +145,7 @@ def join_queue(
     return _queue_out(entry, position)
 
 
-@router.delete("/queue/{printer_id}")
+@router.delete("/api/queue/{printer_id}")
 def leave_queue(
     printer_id: str,
     db: Session = Depends(get_db),
@@ -175,18 +162,18 @@ def leave_queue(
     entry.status = QueueStatus.cancelled
     db.commit()
 
-    # Falls notified → Queue vorrücken damit nächster dran kommt
+    # Falls notified → nächsten benachrichtigen
     advance_queue(db, printer_id)
     return {"ok": True}
 
 
-@router.post("/queue/{printer_id}/acknowledge")
+@router.post("/api/queue/{printer_id}/acknowledge")
 def acknowledge_queue(
     printer_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Nutzer bestätigt innerhalb des 5-Min-Fensters → erhält Reservierung."""
+    """Nutzer bestätigt 'Ich bin dran' → Queue-Entry cancelled. Drucker dann manuell beanspruchen."""
     entry = db.query(QueueEntry).filter(
         QueueEntry.printer_id == printer_id,
         QueueEntry.user_id == current_user.id,
@@ -195,46 +182,26 @@ def acknowledge_queue(
     if not entry:
         raise HTTPException(404, "Kein offenes Benachrichtigungs-Fenster")
 
-    # Sicherstellen dass keine aktive Reservierung mehr existiert (könnte durch Timeout entstanden sein)
-    conflict = get_active_reservation(db, printer_id)
-    if conflict and conflict.user_id != current_user.id:
-        raise HTTPException(409, "Drucker wurde zwischenzeitlich neu reserviert")
-
-    # Reservierung anlegen (falls vom Cleanup noch nicht angelegt)
-    existing_res = db.query(Reservation).filter(
-        Reservation.printer_id == printer_id,
-        Reservation.user_id == current_user.id,
-        Reservation.status == ReservationStatus.active,
-    ).first()
-
-    if not existing_res:
-        now = datetime.utcnow()
-        res = Reservation(
-            printer_id=printer_id,
-            user_id=current_user.id,
-            duration_minutes=AUTO_RESERVE_MINUTES,
-            expires_at=now + timedelta(minutes=AUTO_RESERVE_MINUTES),
-        )
-        db.add(res)
-
     entry.status = QueueStatus.cancelled
     db.commit()
-    return {"ok": True, "message": f"{AUTO_RESERVE_MINUTES}-Min-Reservierung erstellt"}
+    return {"ok": True, "message": "Bestätigt – du kannst den Drucker jetzt beanspruchen"}
 
 
 # ── Hilfsfunktionen ────────────────────────────────────────────────────────────
 
-def _reservation_out(res: Reservation) -> dict:
+def _occupation_out(occ: PrinterOccupation) -> dict:
     now = datetime.utcnow()
-    secs = max(0, int((res.expires_at - now).total_seconds()))
+    pickup_secs = 0
+    if occ.pickup_deadline:
+        pickup_secs = max(0, int((occ.pickup_deadline - now).total_seconds()))
     return {
-        "id": res.id,
-        "printer_id": res.printer_id,
-        "duration_minutes": res.duration_minutes,
-        "reserved_at": res.reserved_at.isoformat(),
-        "expires_at": res.expires_at.isoformat(),
-        "seconds_remaining": secs,
-        "minutes_remaining": secs // 60,
+        "id": occ.id,
+        "printer_id": occ.printer_id,
+        "status": occ.status.value,
+        "claimed_at": occ.claimed_at.isoformat(),
+        "completed_at": occ.completed_at.isoformat() if occ.completed_at else None,
+        "pickup_deadline": occ.pickup_deadline.isoformat() if occ.pickup_deadline else None,
+        "pickup_seconds_remaining": pickup_secs,
     }
 
 

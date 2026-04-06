@@ -54,7 +54,7 @@ class User(Base):
     redeemed_vouchers = relationship("VoucherCode", back_populates="redeemed_by", foreign_keys="VoucherCode.redeemed_by_id")
     messages_received = relationship("AdminMessage", foreign_keys="[AdminMessage.to_user_id]", back_populates="to_user", cascade="all, delete-orphan")
     files = relationship("GCodeFile", back_populates="user", cascade="all, delete-orphan")
-    reservations = relationship("Reservation", back_populates="user", cascade="all, delete-orphan")
+    occupations   = relationship("PrinterOccupation", back_populates="user", cascade="all, delete-orphan")
     queue_entries = relationship("QueueEntry", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -136,27 +136,27 @@ class GCodeFile(Base):
     user = relationship("User", back_populates="files")
 
 
-# ── Reservierungen ─────────────────────────────────────────────────────────────
+# ── Drucker-Belegung ───────────────────────────────────────────────────────────
 
-class ReservationStatus(str, enum.Enum):
-    active    = "active"
-    expired   = "expired"
-    cancelled = "cancelled"
-    used      = "used"   # wird in Phase 6 gesetzt wenn Druck startet
+class OccupationStatus(str, enum.Enum):
+    occupied        = "occupied"         # Drucker wird benutzt / Druck läuft
+    awaiting_pickup = "awaiting_pickup"  # Druck fertig, Nutzer hat 24h zum Abholen
+    released        = "released"         # Freigegeben → Queue kann vorrücken
 
 
-class Reservation(Base):
-    __tablename__ = "reservations"
+class PrinterOccupation(Base):
+    __tablename__ = "printer_occupations"
 
-    id               = Column(Integer, primary_key=True, index=True)
-    printer_id       = Column(String, nullable=False, index=True)
-    user_id          = Column(Integer, ForeignKey("users.id"), nullable=False)
-    status           = Column(Enum(ReservationStatus), default=ReservationStatus.active, nullable=False)
-    duration_minutes = Column(Integer, nullable=False)   # 15 oder 30
-    reserved_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
-    expires_at       = Column(DateTime, nullable=False)
+    id              = Column(Integer, primary_key=True, index=True)
+    printer_id      = Column(String, nullable=False, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status          = Column(Enum(OccupationStatus), default=OccupationStatus.occupied, nullable=False)
+    claimed_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    completed_at    = Column(DateTime, nullable=True)   # Moonraker meldet "complete"
+    pickup_deadline = Column(DateTime, nullable=True)   # completed_at + 24h
+    released_at     = Column(DateTime, nullable=True)
 
-    user = relationship("User", back_populates="reservations")
+    user = relationship("User", back_populates="occupations")
 
 
 # ── Warteschlange ──────────────────────────────────────────────────────────────

@@ -1,29 +1,30 @@
 """
-Warteschlangen- und Reservierungs-Logik.
+Warteschlangen- und Belegungs-Logik für 3D-Drucker-Portal.
 Wird vom Background-Cleanup-Task und von den Endpunkten genutzt.
 """
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.models import (
-    Reservation, ReservationStatus,
+    PrinterOccupation, OccupationStatus,
     QueueEntry, QueueStatus,
 )
+from app.core.printer_client import _cache as printer_cache, CACHE_TTL
 
 QUEUE_NOTIFY_TIMEOUT_MINUTES = 5
-AUTO_RESERVE_MINUTES = 15
+PICKUP_WINDOW_HOURS = 24
 
 
-def get_active_reservation(db: Session, printer_id: str):
-    """Gibt die aktive Reservierung für einen Drucker zurück oder None."""
-    return db.query(Reservation).filter(
-        Reservation.printer_id == printer_id,
-        Reservation.status == ReservationStatus.active,
+def get_active_occupation(db: Session, printer_id: str):
+    """Aktive Belegung für einen Drucker (occupied oder awaiting_pickup)."""
+    return db.query(PrinterOccupation).filter(
+        PrinterOccupation.printer_id == printer_id,
+        PrinterOccupation.status.in_([OccupationStatus.occupied, OccupationStatus.awaiting_pickup]),
     ).first()
 
 
 def get_queue_entries(db: Session, printer_id: str) -> list:
-    """Alle aktiven (waiting/notified) Queue-Einträge für einen Drucker, nach Zeit sortiert."""
+    """Alle aktiven Queue-Einträge (waiting/notified) ältester zuerst."""
     return (
         db.query(QueueEntry)
         .filter(
@@ -35,8 +36,8 @@ def get_queue_entries(db: Session, printer_id: str) -> list:
     )
 
 
-def get_queue_position(db: Session, printer_id: str, user_id: int) -> tuple:
-    """Gibt (entry, position) für einen Nutzer in der Warteschlange zurück."""
+def get_queue_position(db: Session, printer_id: str, user_id: int):
+    """(entry, position) für Nutzer in Warteschlange, oder (None, None)."""
     entries = get_queue_entries(db, printer_id)
     for i, e in enumerate(entries):
         if e.user_id == user_id:
@@ -46,9 +47,9 @@ def get_queue_position(db: Session, printer_id: str, user_id: int) -> tuple:
 
 def advance_queue(db: Session, printer_id: str):
     """
-    Rückt die Warteschlange vor:
+    Rückt Warteschlange vor:
     1. Überfällige 'notified'-Einträge → 'skipped'
-    2. Nächsten 'waiting'-Eintrag → 'notified' + automatische 15-Min-Reservierung
+    2. Nächsten 'waiting'-Eintrag → 'notified'
     """
     now = datetime.utcnow()
     timeout_threshold = now - timedelta(minutes=QUEUE_NOTIFY_TIMEOUT_MINUTES)
@@ -60,13 +61,13 @@ def advance_queue(db: Session, printer_id: str):
         QueueEntry.notified_at < timeout_threshold,
     ).update({"status": QueueStatus.skipped})
 
-    # Prüfen ob schon jemand aktiv notified ist (innerhalb Frist)
+    # Prüfen ob bereits jemand im 5-Min-Fenster ist
     still_notified = db.query(QueueEntry).filter(
         QueueEntry.printer_id == printer_id,
         QueueEntry.status == QueueStatus.notified,
     ).first()
     if still_notified:
-        return  # Warten bis Frist abläuft oder acknowledge
+        return
 
     # Nächsten waiting-Eintrag holen
     next_entry = (
@@ -79,18 +80,7 @@ def advance_queue(db: Session, printer_id: str):
         .first()
     )
     if not next_entry:
-        return  # Warteschlange leer
-
-    # Automatische Reservierung erstellen
-    expires_at = now + timedelta(minutes=AUTO_RESERVE_MINUTES)
-    reservation = Reservation(
-        printer_id=printer_id,
-        user_id=next_entry.user_id,
-        status=ReservationStatus.active,
-        duration_minutes=AUTO_RESERVE_MINUTES,
-        expires_at=expires_at,
-    )
-    db.add(reservation)
+        return
 
     next_entry.status = QueueStatus.notified
     next_entry.notified_at = now
@@ -99,25 +89,48 @@ def advance_queue(db: Session, printer_id: str):
 
 def expire_and_advance(db: Session):
     """
-    Haupt-Cleanup-Funktion, wird alle 30s vom Background-Task aufgerufen.
-    - Abgelaufene Reservierungen → expired
-    - Queue für jeden betroffenen Drucker vorrücken
+    Haupt-Cleanup-Funktion (alle 30s vom Background-Task aufgerufen):
+    1. Pickup-Deadlines prüfen → auto-release nach 24h
+    2. Moonraker-Cache prüfen: occupied + complete → awaiting_pickup
+    3. Released-Occupations → queue advance
     """
     now = datetime.utcnow()
-    expired = db.query(Reservation).filter(
-        Reservation.status == ReservationStatus.active,
-        Reservation.expires_at < now,
+
+    # 1. Pickup-Deadline abgelaufen → auto-release
+    expired_pickups = db.query(PrinterOccupation).filter(
+        PrinterOccupation.status == OccupationStatus.awaiting_pickup,
+        PrinterOccupation.pickup_deadline < now,
     ).all()
+    for occ in expired_pickups:
+        occ.status = OccupationStatus.released
+        occ.released_at = now
 
-    affected_printers = set()
-    for res in expired:
-        res.status = ReservationStatus.expired
-        affected_printers.add(res.printer_id)
-
-    if affected_printers:
+    if expired_pickups:
         db.commit()
 
-    for printer_id in affected_printers:
-        # Nur wenn kein neuer aktiver Eintrag (z.B. durch acknowledge)
-        if not get_active_reservation(db, printer_id):
-            advance_queue(db, printer_id)
+    # 2. Moonraker "complete" erkennen für occupied printers
+    occupied = db.query(PrinterOccupation).filter(
+        PrinterOccupation.status == OccupationStatus.occupied,
+    ).all()
+    for occ in occupied:
+        cached, ts = printer_cache.get(occ.printer_id, ({}, 0.0))
+        import time
+        if time.time() - ts < CACHE_TTL * 4:   # max 20s alt
+            moonraker_state = cached.get("state")
+            if moonraker_state == "complete":
+                occ.status = OccupationStatus.awaiting_pickup
+                occ.completed_at = now
+                occ.pickup_deadline = now + timedelta(hours=PICKUP_WINDOW_HOURS)
+
+    if occupied:
+        db.commit()
+
+    # 3. Queue-Advance für frisch released Occupations
+    released = db.query(PrinterOccupation).filter(
+        PrinterOccupation.status == OccupationStatus.released,
+        PrinterOccupation.released_at >= now - timedelta(minutes=1),  # frisch (letzte Minute)
+    ).all()
+    for occ in released:
+        # Nur wenn keine neue aktive Occupation für diesen Drucker
+        if not get_active_occupation(db, occ.printer_id):
+            advance_queue(db, occ.printer_id)
