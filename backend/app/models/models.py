@@ -1,0 +1,116 @@
+import enum
+import secrets
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Boolean, Enum, BigInteger, DateTime, ForeignKey, Text
+from sqlalchemy.orm import relationship
+from app.core.database import Base
+from app.core.config import DEFAULT_STORAGE_LIMIT_BYTES
+
+VOUCHER_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
+def generate_voucher_code() -> str:
+    return "-".join(
+        "".join(secrets.choice(VOUCHER_ALPHABET) for _ in range(4))
+        for _ in range(3)
+    )
+
+
+class UserRole(str, enum.Enum):
+    admin = "admin"
+    power_user = "power_user"
+    normal = "normal"
+
+
+class VoucherStatus(str, enum.Enum):
+    open = "open"
+    redeemed = "redeemed"
+    cancelled = "cancelled"
+
+
+class TransactionType(str, enum.Enum):
+    topup = "topup"    # Gutschein eingelöst
+    charge = "charge"  # Druck abgerechnet
+    refund = "refund"  # Rückerstattung
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(Enum(UserRole), default=UserRole.normal, nullable=False)
+    balance_cents = Column(Integer, default=0, nullable=False)
+    storage_used_bytes = Column(BigInteger, default=0, nullable=False)
+    storage_limit_bytes = Column(BigInteger, default=DEFAULT_STORAGE_LIMIT_BYTES, nullable=False)
+    is_blocked = Column(Boolean, default=False, nullable=False)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_login_at = Column(DateTime, nullable=True)
+
+    transactions = relationship("Transaction", back_populates="user", foreign_keys="Transaction.user_id", cascade="all, delete-orphan")
+    created_vouchers = relationship("VoucherCode", back_populates="created_by", foreign_keys="VoucherCode.created_by_id", passive_deletes=True)
+    redeemed_vouchers = relationship("VoucherCode", back_populates="redeemed_by", foreign_keys="VoucherCode.redeemed_by_id")
+    messages_received = relationship("AdminMessage", foreign_keys="[AdminMessage.to_user_id]", back_populates="to_user", cascade="all, delete-orphan")
+
+
+class VoucherCode(Base):
+    __tablename__ = "voucher_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True, nullable=False)
+    value_cents = Column(Integer, nullable=False)
+    status = Column(Enum(VoucherStatus), default=VoucherStatus.open, nullable=False)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    redeemed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    redeemed_at = Column(DateTime, nullable=True)
+
+    created_by = relationship("User", back_populates="created_vouchers", foreign_keys=[created_by_id])
+    redeemed_by = relationship("User", back_populates="redeemed_vouchers", foreign_keys=[redeemed_by_id])
+    transaction = relationship("Transaction", back_populates="voucher", uselist=False)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    type = Column(Enum(TransactionType), nullable=False)
+    amount_cents = Column(Integer, nullable=False)  # positiv=Gutschrift, negativ=Abbuchung
+    description = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    related_voucher_id = Column(Integer, ForeignKey("voucher_codes.id"), nullable=True)
+
+    user = relationship("User", back_populates="transactions", foreign_keys=[user_id])
+    voucher = relationship("VoucherCode", back_populates="transaction")
+
+
+class AdminMessage(Base):
+    __tablename__ = "admin_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # nullable falls Admin gelöscht wird
+    to_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    read_at = Column(DateTime, nullable=True)
+    reply = Column(Text, nullable=True)
+    replied_at = Column(DateTime, nullable=True)
+
+    from_admin = relationship("User", foreign_keys=[from_admin_id])
+    to_user = relationship("User", foreign_keys=[to_user_id], back_populates="messages_received")
+
+
+class ActivityLog(Base):
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_email = Column(String, nullable=True)   # gespeichert falls User später gelöscht wird
+    action = Column(String, nullable=False)        # register, login, login_failed, voucher_redeem
+    details = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", foreign_keys=[user_id])

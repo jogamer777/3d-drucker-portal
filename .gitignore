@@ -1,0 +1,21 @@
+# Secrets – niemals committen
+backend/.env
+
+# Datenbank (enthält Nutzerdaten)
+backend/*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+
+# Node
+frontend/node_modules/
+
+# Build-Artefakte (aus Quellcode wiederherstellbar)
+frontend/dist/
+
+# System
+.DS_Store
+Thumbs.db
