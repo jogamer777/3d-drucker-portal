@@ -182,6 +182,22 @@ class StorageInfo(BaseModel):
     limit_bytes: int
 
 
+class AdminGCodeFileOut(BaseModel):
+    id: int
+    user_id: int
+    user_email: str
+    filename: str
+    size_bytes: int
+    duration_seconds: Optional[int]
+    filament_usage: Optional[dict]
+    thumbnail_b64: Optional[str]
+    profile_signature: Optional[str]
+    uploaded_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ── Activity Log ──────────────────────────────────────────────────────────────
 
 class ActivityLogOut(BaseModel):

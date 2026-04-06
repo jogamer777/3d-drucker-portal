@@ -1,16 +1,20 @@
+import os
+import json
 import secrets
 import string
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import hash_password
-from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog
+from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile
 from app.schemas.schemas import (
     AdminUserOut, AdminUserUpdate, PasswordResetResponse,
     AdminMessageCreate, AdminMessageOut, AdminTransactionOut, ActivityLogOut,
+    AdminGCodeFileOut,
 )
 from app.routers.user import require_admin
 
@@ -165,6 +169,82 @@ def list_all_transactions(
             related_voucher_code=voucher_code,
         ))
     return result
+
+
+@router.get("/files", response_model=List[AdminGCodeFileOut])
+def list_all_files(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    files = (
+        db.query(GCodeFile)
+        .order_by(GCodeFile.uploaded_at.desc())
+        .limit(500)
+        .all()
+    )
+    result = []
+    for f in files:
+        result.append(AdminGCodeFileOut(
+            id=f.id,
+            user_id=f.user_id,
+            user_email=f.user.email,
+            filename=f.filename,
+            size_bytes=f.size_bytes,
+            duration_seconds=f.duration_seconds,
+            filament_usage=json.loads(f.filament_usage) if f.filament_usage else None,
+            thumbnail_b64=f.thumbnail_b64,
+            profile_signature=f.profile_signature,
+            uploaded_at=f.uploaded_at,
+        ))
+    return result
+
+
+@router.get("/files/{file_id}/download")
+def admin_download_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    gfile = db.query(GCodeFile).filter(GCodeFile.id == file_id).first()
+    if not gfile:
+        raise HTTPException(404, "Datei nicht gefunden")
+    if not os.path.exists(gfile.filepath):
+        raise HTTPException(404, "Datei nicht auf Disk vorhanden")
+    return FileResponse(
+        path=gfile.filepath,
+        filename=gfile.filename,
+        media_type="application/octet-stream",
+    )
+
+
+@router.delete("/files/{file_id}")
+def admin_delete_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    gfile = db.query(GCodeFile).filter(GCodeFile.id == file_id).first()
+    if not gfile:
+        raise HTTPException(404, "Datei nicht gefunden")
+
+    owner = db.query(User).filter(User.id == gfile.user_id).first()
+
+    if os.path.exists(gfile.filepath):
+        os.remove(gfile.filepath)
+
+    if owner:
+        owner.storage_used_bytes = max(0, owner.storage_used_bytes - gfile.size_bytes)
+
+    db.add(ActivityLog(
+        user_id=gfile.user_id,
+        actor_email=admin.email,
+        action="admin_file_delete",
+        details=f"Admin {admin.email} löschte Datei: {gfile.filename} (Nutzer: {owner.email if owner else '?'})",
+    ))
+
+    db.delete(gfile)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/messages", response_model=List[AdminMessageOut])

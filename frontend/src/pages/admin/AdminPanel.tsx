@@ -3,8 +3,9 @@ import UsersTab from './UsersTab'
 import VouchersTab from './VouchersTab'
 import TransactionsTab from './TransactionsTab'
 import ActivityTab from './ActivityTab'
+import FilesTab from './FilesTab'
 
-type Tab = 'users' | 'vouchers' | 'transactions' | 'activity'
+type Tab = 'users' | 'vouchers' | 'transactions' | 'activity' | 'files'
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
@@ -20,6 +21,7 @@ export default function AdminPanel() {
           ['vouchers', 'Gutscheine'],
           ['transactions', 'Finanzen'],
           ['activity', 'Aktivität'],
+          ['files', 'Dateien'],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -40,6 +42,7 @@ export default function AdminPanel() {
         {tab === 'vouchers' && <VouchersTab />}
         {tab === 'transactions' && <TransactionsTab />}
         {tab === 'activity' && <ActivityTab />}
+        {tab === 'files' && <FilesTab />}
       </div>
     </div>
   )

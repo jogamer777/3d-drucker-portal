@@ -10,13 +10,16 @@ interface ActivityLog {
 }
 
 const ACTION_CONFIG: Record<string, { label: string; color: string }> = {
-  register:       { label: 'Registrierung', color: 'bg-blue-100 text-blue-700' },
-  login:          { label: 'Login',          color: 'bg-green-100 text-green-700' },
-  login_failed:   { label: 'Login fehlgesch.', color: 'bg-red-100 text-red-700' },
-  voucher_redeem: { label: 'Code eingelöst', color: 'bg-purple-100 text-purple-700' },
+  register:          { label: 'Registrierung',         color: 'bg-blue-100 text-blue-700' },
+  login:             { label: 'Login',                  color: 'bg-green-100 text-green-700' },
+  login_failed:      { label: 'Login fehlgesch.',       color: 'bg-red-100 text-red-700' },
+  voucher_redeem:    { label: 'Code eingelöst',         color: 'bg-purple-100 text-purple-700' },
+  file_upload:       { label: 'Datei hochgeladen',      color: 'bg-indigo-100 text-indigo-700' },
+  file_delete:       { label: 'Datei gelöscht',         color: 'bg-orange-100 text-orange-700' },
+  admin_file_delete: { label: 'Admin: Datei gelöscht',  color: 'bg-red-100 text-red-700' },
 }
 
-type Filter = 'all' | 'register' | 'login' | 'login_failed' | 'voucher_redeem'
+type Filter = 'all' | 'register' | 'login' | 'login_failed' | 'voucher_redeem' | 'file_upload' | 'file_delete'
 
 export default function ActivityTab() {
   const [logs, setLogs] = useState<ActivityLog[]>([])
@@ -53,6 +56,8 @@ export default function ActivityTab() {
             ['login', `Login (${count('login')})`],
             ['login_failed', `Fehlschlag (${count('login_failed')})`],
             ['voucher_redeem', `Code eingelöst (${count('voucher_redeem')})`],
+            ['file_upload', `Upload (${count('file_upload')})`],
+            ['file_delete', `Datei gelöscht (${count('file_delete')})`],
           ] as const).map(([f, label]) => (
             <button
               key={f}
