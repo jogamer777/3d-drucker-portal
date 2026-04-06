@@ -1,8 +1,9 @@
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.database import engine, Base
-from app.routers import auth, user, vouchers, transactions, admin, files, printers
+from app.core.database import engine, Base, SessionLocal
+from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations
 
 # Datenbank-Tabellen erstellen (neue Tabellen werden automatisch angelegt)
 Base.metadata.create_all(bind=engine)
@@ -10,7 +11,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="3D-Drucker-Portal",
     description="Webplattform zur Verwaltung von 3D-Druckern in einer Schülerfirma",
-    version="0.2.0",
+    version="0.4.0",
 )
 
 app.add_middleware(
@@ -33,8 +34,29 @@ app.include_router(transactions.router)
 app.include_router(admin.router)
 app.include_router(files.router)
 app.include_router(printers.router)
+app.include_router(reservations.router)
+
+
+async def _reservation_cleanup_loop():
+    """Läuft alle 30 Sekunden: Abgelaufene Reservierungen bereinigen + Queue vorrücken."""
+    from app.core.queue_logic import expire_and_advance
+    while True:
+        await asyncio.sleep(30)
+        try:
+            db = SessionLocal()
+            try:
+                expire_and_advance(db)
+            finally:
+                db.close()
+        except Exception:
+            pass
+
+
+@app.on_event("startup")
+async def startup_tasks():
+    asyncio.create_task(_reservation_cleanup_loop())
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.3.0"}
+    return {"status": "ok", "version": "0.4.0"}

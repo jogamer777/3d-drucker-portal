@@ -54,6 +54,8 @@ class User(Base):
     redeemed_vouchers = relationship("VoucherCode", back_populates="redeemed_by", foreign_keys="VoucherCode.redeemed_by_id")
     messages_received = relationship("AdminMessage", foreign_keys="[AdminMessage.to_user_id]", back_populates="to_user", cascade="all, delete-orphan")
     files = relationship("GCodeFile", back_populates="user", cascade="all, delete-orphan")
+    reservations = relationship("Reservation", back_populates="user", cascade="all, delete-orphan")
+    queue_entries = relationship("QueueEntry", back_populates="user", cascade="all, delete-orphan")
 
 
 class VoucherCode(Base):
@@ -132,3 +134,48 @@ class GCodeFile(Base):
     uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="files")
+
+
+# ── Reservierungen ─────────────────────────────────────────────────────────────
+
+class ReservationStatus(str, enum.Enum):
+    active    = "active"
+    expired   = "expired"
+    cancelled = "cancelled"
+    used      = "used"   # wird in Phase 6 gesetzt wenn Druck startet
+
+
+class Reservation(Base):
+    __tablename__ = "reservations"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    printer_id       = Column(String, nullable=False, index=True)
+    user_id          = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status           = Column(Enum(ReservationStatus), default=ReservationStatus.active, nullable=False)
+    duration_minutes = Column(Integer, nullable=False)   # 15 oder 30
+    reserved_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at       = Column(DateTime, nullable=False)
+
+    user = relationship("User", back_populates="reservations")
+
+
+# ── Warteschlange ──────────────────────────────────────────────────────────────
+
+class QueueStatus(str, enum.Enum):
+    waiting   = "waiting"
+    notified  = "notified"    # an der Reihe, 5-Min-Fenster
+    skipped   = "skipped"     # nicht reagiert → übersprungen
+    cancelled = "cancelled"   # selbst ausgetreten
+
+
+class QueueEntry(Base):
+    __tablename__ = "queue_entries"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    printer_id  = Column(String, nullable=False, index=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status      = Column(Enum(QueueStatus), default=QueueStatus.waiting, nullable=False)
+    created_at  = Column(DateTime, default=datetime.utcnow, nullable=False)
+    notified_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="queue_entries")
