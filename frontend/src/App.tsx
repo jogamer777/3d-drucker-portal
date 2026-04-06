@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import Wallet from './pages/Wallet'
+import Files from './pages/Files'
 import AdminPanel from './pages/admin/AdminPanel'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -31,7 +32,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/guthaben" element={<Wallet />} />
           <Route path="/drucker" element={<div className="text-gray-500 p-4">Drucker-Übersicht – folgt in Phase 4</div>} />
-          <Route path="/dateien" element={<div className="text-gray-500 p-4">Datei-Manager – folgt in Phase 3</div>} />
+          <Route path="/dateien" element={<Files />} />
         </Route>
 
         <Route element={<AdminRoute><Layout /></AdminRoute>}>

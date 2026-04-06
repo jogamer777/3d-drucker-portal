@@ -53,6 +53,7 @@ class User(Base):
     created_vouchers = relationship("VoucherCode", back_populates="created_by", foreign_keys="VoucherCode.created_by_id", passive_deletes=True)
     redeemed_vouchers = relationship("VoucherCode", back_populates="redeemed_by", foreign_keys="VoucherCode.redeemed_by_id")
     messages_received = relationship("AdminMessage", foreign_keys="[AdminMessage.to_user_id]", back_populates="to_user", cascade="all, delete-orphan")
+    files = relationship("GCodeFile", back_populates="user", cascade="all, delete-orphan")
 
 
 class VoucherCode(Base):
@@ -114,3 +115,20 @@ class ActivityLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", foreign_keys=[user_id])
+
+
+class GCodeFile(Base):
+    __tablename__ = "gcode_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    filename = Column(String, nullable=False)
+    filepath = Column(String, nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    duration_seconds = Column(Integer, nullable=True)
+    filament_usage = Column(String, nullable=True)   # JSON-String
+    thumbnail_b64 = Column(Text, nullable=True)      # data:image/png;base64,...
+    profile_signature = Column(String, nullable=True)
+    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    user = relationship("User", back_populates="files")

@@ -161,6 +161,29 @@ class MessageReplyRequest(BaseModel):
 
 # ── Activity Log ──────────────────────────────────────────────────────────────
 
+# ── Files ─────────────────────────────────────────────────────────────────────
+
+class GCodeFileOut(BaseModel):
+    id: int
+    filename: str
+    size_bytes: int
+    duration_seconds: Optional[int]
+    filament_usage: Optional[dict]
+    thumbnail_b64: Optional[str]
+    profile_signature: Optional[str]
+    uploaded_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class StorageInfo(BaseModel):
+    used_bytes: int
+    limit_bytes: int
+
+
+# ── Activity Log ──────────────────────────────────────────────────────────────
+
 class ActivityLogOut(BaseModel):
     id: int
     actor_email: Optional[str]

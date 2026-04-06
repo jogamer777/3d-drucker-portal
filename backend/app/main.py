@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base
-from app.routers import auth, user, vouchers, transactions, admin
+from app.routers import auth, user, vouchers, transactions, admin, files
 
 # Datenbank-Tabellen erstellen (neue Tabellen werden automatisch angelegt)
 Base.metadata.create_all(bind=engine)
@@ -31,8 +31,9 @@ app.include_router(user.router)
 app.include_router(vouchers.router)
 app.include_router(transactions.router)
 app.include_router(admin.router)
+app.include_router(files.router)
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.3.0"}
