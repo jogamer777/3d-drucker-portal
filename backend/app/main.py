@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base
-from app.routers import auth, user, vouchers, transactions, admin, files
+from app.routers import auth, user, vouchers, transactions, admin, files, printers
 
 # Datenbank-Tabellen erstellen (neue Tabellen werden automatisch angelegt)
 Base.metadata.create_all(bind=engine)
@@ -32,6 +32,7 @@ app.include_router(vouchers.router)
 app.include_router(transactions.router)
 app.include_router(admin.router)
 app.include_router(files.router)
+app.include_router(printers.router)
 
 
 @app.get("/api/health")

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore, formatBalance } from '../stores/authStore'
 import api from '../lib/api'
@@ -13,12 +13,48 @@ interface UserMessage {
   replied_at: string | null
 }
 
+interface PrinterStatus {
+  id: string
+  name: string
+  online: boolean
+  state: string
+  filename: string | null
+  progress: number
+  remaining_seconds: number | null
+}
+
+const STATE_DOT: Record<string, string> = {
+  idle:          'bg-green-500',
+  printing:      'bg-blue-500',
+  paused:        'bg-yellow-500',
+  error:         'bg-red-500',
+  complete:      'bg-green-400',
+  offline:       'bg-gray-300',
+  pending_setup: 'bg-gray-300',
+}
+const STATE_LABEL: Record<string, string> = {
+  idle:          'Bereit',
+  printing:      'Druckt',
+  paused:        'Pausiert',
+  error:         'Fehler',
+  complete:      'Fertig',
+  offline:       'Offline',
+  pending_setup: 'Einrichtung',
+}
+
+const formatTime = (s: number) => {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 export default function Dashboard() {
   const { user } = useAuthStore()
   const [messages, setMessages] = useState<UserMessage[]>([])
   const [msgIndex, setMsgIndex] = useState(0)
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
+  const [printers, setPrinters] = useState<PrinterStatus[]>([])
+  const printerInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     api.get('/user/messages?unread=true').then(r => {
@@ -28,6 +64,14 @@ export default function Dashboard() {
         setReply('')
       }
     }).catch(() => {})
+
+    const loadPrinters = () =>
+      api.get('/printers').then(r => setPrinters(r.data)).catch(() => {})
+    loadPrinters()
+    printerInterval.current = setInterval(loadPrinters, 30_000)
+    return () => {
+      if (printerInterval.current) clearInterval(printerInterval.current)
+    }
   }, [])
 
   const currentMsg = messages[msgIndex] ?? null
@@ -74,19 +118,53 @@ export default function Dashboard() {
           <p className="text-xs text-blue-600 mt-2">Code einlösen →</p>
         </Link>
 
-        {/* K2 Combo */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">K2 Plus Combo</p>
-          <p className="text-base font-medium text-gray-400 mt-1">Wird verbunden...</p>
-          <p className="text-xs text-gray-400 mt-1">Phase 4</p>
-        </div>
-
-        {/* CR-X Pro */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm text-gray-500">CR-X Pro</p>
-          <p className="text-base font-medium text-gray-400 mt-1">Wird verbunden...</p>
-          <p className="text-xs text-gray-400 mt-1">Phase 4</p>
-        </div>
+        {/* Drucker-Status-Karten */}
+        {printers.length === 0 ? (
+          <>
+            {['K2 Plus Combo', 'CR-X Pro'].map(name => (
+              <div key={name} className="bg-white rounded-xl border border-gray-200 p-5">
+                <p className="text-sm text-gray-500">{name}</p>
+                <p className="text-sm text-gray-400 mt-1">Verbinde...</p>
+              </div>
+            ))}
+          </>
+        ) : (
+          printers.map(p => (
+            <Link
+              key={p.id}
+              to="/drucker"
+              className="bg-white rounded-xl border border-gray-200 p-5 hover:border-blue-300 transition-colors block"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`w-2 h-2 rounded-full ${STATE_DOT[p.state] ?? 'bg-gray-300'}`} />
+                <p className="text-sm text-gray-500">{p.name}</p>
+              </div>
+              <p className="text-base font-semibold text-gray-900">
+                {STATE_LABEL[p.state] ?? p.state}
+              </p>
+              {p.state === 'printing' && p.progress > 0 && (
+                <>
+                  {p.filename && (
+                    <p className="text-xs text-gray-500 truncate mt-0.5">{p.filename}</p>
+                  )}
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2">
+                    <div
+                      className="bg-blue-500 h-1.5 rounded-full"
+                      style={{ width: `${Math.round(p.progress * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {Math.round(p.progress * 100)}%
+                    {p.remaining_seconds != null && p.remaining_seconds > 0 && (
+                      <> · {formatTime(p.remaining_seconds)} verbleibend</>
+                    )}
+                  </p>
+                </>
+              )}
+              <p className="text-xs text-blue-600 mt-2">Details →</p>
+            </Link>
+          ))
+        )}
       </div>
 
       {/* Schnell-Links */}
