@@ -4,8 +4,9 @@ import VouchersTab from './VouchersTab'
 import TransactionsTab from './TransactionsTab'
 import ActivityTab from './ActivityTab'
 import FilesTab from './FilesTab'
+import PrintersTab from './PrintersTab'
 
-type Tab = 'users' | 'vouchers' | 'transactions' | 'activity' | 'files'
+type Tab = 'users' | 'vouchers' | 'transactions' | 'activity' | 'files' | 'printers'
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('users')
@@ -15,13 +16,14 @@ export default function AdminPanel() {
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Admin-Panel</h1>
 
       {/* Tab-Navigation */}
-      <div className="flex border-b border-gray-200 mb-6">
+      <div className="flex flex-wrap border-b border-gray-200 mb-6">
         {([
           ['users', 'Nutzer'],
           ['vouchers', 'Gutscheine'],
           ['transactions', 'Finanzen'],
           ['activity', 'Aktivität'],
           ['files', 'Dateien'],
+          ['printers', 'Drucker'],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -43,6 +45,7 @@ export default function AdminPanel() {
         {tab === 'transactions' && <TransactionsTab />}
         {tab === 'activity' && <ActivityTab />}
         {tab === 'files' && <FilesTab />}
+        {tab === 'printers' && <PrintersTab />}
       </div>
     </div>
   )

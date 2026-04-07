@@ -4,12 +4,14 @@ Unterstützt: Moonraker (K2 Plus Combo), OctoPrint (CR-X Pro).
 Reines Python stdlib – kein pip nötig.
 """
 import json
+import os
+import secrets
 import time
 import urllib.request
 import urllib.error
 from typing import Optional
 
-# ── Drucker-Konfiguration ──────────────────────────────────────────────────────
+# ── Drucker-Basiskonfiguration (statisch) ──────────────────────────────────────
 
 PRINTERS: dict[str, dict] = {
     "k2": {
@@ -22,10 +24,49 @@ PRINTERS: dict[str, dict] = {
         "name": "CR-X Pro",
         "api": "octoprint",
         "url": "http://127.0.0.1:5000",
-        "api_key": "",          # nach OctoPrint-Setup hier eintragen
+        "api_key": "",
         "webcam_path": None,
     },
 }
+
+# Pfad zur persistenten Drucker-Config (API-Keys etc.)
+_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "printer_config.json")
+_CONFIG_PATH = os.path.normpath(_CONFIG_PATH)
+
+
+def reload_printer_config() -> None:
+    """Lädt printer_config.json und merged in PRINTERS (überschreibt nur konfigurierbare Felder)."""
+    try:
+        with open(_CONFIG_PATH, "r") as f:
+            cfg = json.load(f)
+        for pid, overrides in cfg.items():
+            if pid in PRINTERS:
+                PRINTERS[pid].update({k: v for k, v in overrides.items() if v})
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+
+def save_printer_config(data: dict) -> None:
+    """Speichert konfigurierbare Felder in printer_config.json."""
+    try:
+        existing = {}
+        try:
+            with open(_CONFIG_PATH, "r") as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+        existing.update(data)
+        with open(_CONFIG_PATH, "w") as f:
+            json.dump(existing, f, indent=2)
+        reload_printer_config()
+    except Exception as e:
+        raise RuntimeError(f"Config konnte nicht gespeichert werden: {e}")
+
+
+# Beim Modulstart Config laden
+reload_printer_config()
 
 # ── In-Memory Cache ────────────────────────────────────────────────────────────
 
@@ -155,12 +196,10 @@ def _fetch_octoprint(pid: str, cfg: dict) -> dict:
     headers = {"X-Api-Key": api_key, "Accept": "application/json"}
 
     try:
-        # Printer state + temps
         req = urllib.request.Request(f"{base}/api/printer", headers=headers)
         with urllib.request.urlopen(req, timeout=3) as resp:
             printer_data = json.loads(resp.read())
 
-        # Job info
         req2 = urllib.request.Request(f"{base}/api/job", headers=headers)
         with urllib.request.urlopen(req2, timeout=3) as resp2:
             job_data = json.loads(resp2.read())
@@ -206,7 +245,7 @@ def _fetch_octoprint(pid: str, cfg: dict) -> dict:
     }
 
 
-# ── Moonraker-Steuerbefehle ────────────────────────────────────────────────────
+# ── Steuerbefehle (Moonraker + OctoPrint) ─────────────────────────────────────
 
 _MOONRAKER_CONTROL_ENDPOINTS = {
     "pause":          "/printer/print/pause",
@@ -216,24 +255,170 @@ _MOONRAKER_CONTROL_ENDPOINTS = {
 }
 
 
-def send_moonraker_command(printer_id: str, action: str) -> bool:
-    """Sendet Steuerbefehl an Moonraker. Gibt True bei Erfolg zurück."""
+def send_printer_command(printer_id: str, action: str) -> bool:
+    """Sendet Steuerbefehl an Drucker (Moonraker oder OctoPrint). Gibt True bei Erfolg zurück."""
     cfg = PRINTERS.get(printer_id)
-    if not cfg or cfg.get("api") != "moonraker":
+    if not cfg:
         return False
-    endpoint = _MOONRAKER_CONTROL_ENDPOINTS.get(action)
-    if not endpoint:
+
+    _cache.pop(printer_id, None)
+
+    if cfg["api"] == "moonraker":
+        endpoint = _MOONRAKER_CONTROL_ENDPOINTS.get(action)
+        if not endpoint:
+            return False
+        try:
+            req = urllib.request.Request(
+                cfg["url"] + endpoint,
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+            return True
+        except Exception:
+            return False
+
+    elif cfg["api"] == "octoprint":
+        api_key = cfg.get("api_key", "")
+        if not api_key:
+            return False
+        base = cfg["url"]
+        headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+        try:
+            if action == "pause":
+                body = json.dumps({"command": "pause", "action": "pause"}).encode()
+                url = f"{base}/api/job"
+            elif action == "resume":
+                body = json.dumps({"command": "pause", "action": "resume"}).encode()
+                url = f"{base}/api/job"
+            elif action == "cancel":
+                body = json.dumps({"command": "cancel"}).encode()
+                url = f"{base}/api/job"
+            elif action == "emergency_stop":
+                body = json.dumps({"command": "cancel"}).encode()
+                url = f"{base}/api/job"
+            else:
+                return False
+            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+            return True
+        except Exception:
+            return False
+
+    return False
+
+
+# Rückwärtskompatibilität
+def send_moonraker_command(printer_id: str, action: str) -> bool:
+    return send_printer_command(printer_id, action)
+
+
+# ── Druck starten (Moonraker + OctoPrint) ─────────────────────────────────────
+
+def upload_and_start_print(printer_id: str, filepath: str, filename: str) -> bool:
+    """G-Code-Datei an Drucker übertragen und Druck starten."""
+    cfg = PRINTERS.get(printer_id)
+    if not cfg:
         return False
-    url = cfg["url"] + endpoint
+
+    if cfg["api"] == "moonraker":
+        return _moonraker_upload_and_start(cfg, filepath, filename)
+    elif cfg["api"] == "octoprint":
+        return _octoprint_upload_and_start(cfg, filepath, filename)
+    return False
+
+
+def _moonraker_upload_and_start(cfg: dict, filepath: str, filename: str) -> bool:
+    """Moonraker: POST /server/files/upload → POST /printer/print/start"""
+    base = cfg["url"]
+    boundary = "----FormBoundary" + secrets.token_hex(8)
+
     try:
+        with open(filepath, "rb") as f:
+            file_data = f.read()
+
+        header = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="root"\r\n\r\ngcodes\r\n'
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            f"Content-Type: text/plain\r\n\r\n"
+        ).encode()
+        footer = f"\r\n--{boundary}--\r\n".encode()
+        body = header + file_data + footer
+
         req = urllib.request.Request(
-            url, data=b"{}",
+            f"{base}/server/files/upload",
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60):
+            pass
+
+        # Druck starten
+        req2 = urllib.request.Request(
+            f"{base}/printer/print/start",
+            data=json.dumps({"filename": filename}).encode(),
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=5):
+        with urllib.request.urlopen(req2, timeout=10):
             pass
-        _cache.pop(printer_id, None)
+
+        return True
+    except Exception:
+        return False
+
+
+def _octoprint_upload_and_start(cfg: dict, filepath: str, filename: str) -> bool:
+    """OctoPrint: POST /api/files/local → POST /api/files/local/<filename> select+print"""
+    api_key = cfg.get("api_key", "")
+    if not api_key:
+        return False
+    base = cfg["url"]
+    boundary = "----FormBoundary" + secrets.token_hex(8)
+
+    try:
+        with open(filepath, "rb") as f:
+            file_data = f.read()
+
+        header = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        footer = f"\r\n--{boundary}--\r\n".encode()
+        body = header + file_data + footer
+
+        req = urllib.request.Request(
+            f"{base}/api/files/local",
+            data=body,
+            headers={
+                "X-Api-Key": api_key,
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60):
+            pass
+
+        # Druck direkt starten (select + print)
+        req2 = urllib.request.Request(
+            f"{base}/api/files/local/{filename}",
+            data=json.dumps({"command": "select", "print": True}).encode(),
+            headers={
+                "X-Api-Key": api_key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req2, timeout=10):
+            pass
+
         return True
     except Exception:
         return False

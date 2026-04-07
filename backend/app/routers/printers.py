@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models.models import User, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus
+from app.models.models import User, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus, Transaction, TransactionType, GCodeFile
 from app.routers.user import get_current_user
-from app.core.printer_client import get_all_printers, get_printer_status, send_moonraker_command, PRINTERS
+from app.core.printer_client import get_all_printers, get_printer_status, send_moonraker_command, send_printer_command, upload_and_start_print, PRINTERS
 from app.core.queue_logic import get_active_occupation, get_queue_position
+from app.core.print_rates import calculate_cost
 
 router = APIRouter(prefix="/api/printers", tags=["printers"])
 
@@ -179,13 +180,83 @@ def control_printer(
         if not occ or occ.user_id != current_user.id:
             raise HTTPException(403, "Kein Zugriff – du benutzt diesen Drucker nicht")
 
-    if printer_id not in PRINTERS or PRINTERS[printer_id].get("api") != "moonraker":
-        raise HTTPException(400, "Steuerung nur für Moonraker-Drucker verfügbar")
+    if printer_id not in PRINTERS:
+        raise HTTPException(404, "Drucker nicht gefunden")
 
-    ok = send_moonraker_command(printer_id, body.action)
+    ok = send_printer_command(printer_id, body.action)
     if not ok:
         raise HTTPException(500, "Steuerbefehl fehlgeschlagen – Drucker erreichbar?")
     return {"ok": True}
+
+
+def _parse_filament_grams(json_str: str | None) -> float:
+    """Summiert Filament-Gramm aus filament_usage JSON (ohne flush)."""
+    if not json_str:
+        return 0.0
+    try:
+        d = json.loads(json_str)
+        return sum(v for k, v in d.items() if k != "flush" and isinstance(v, (int, float)))
+    except Exception:
+        return 0.0
+
+
+class StartPrintRequest(BaseModel):
+    file_id: int
+
+
+@router.post("/{printer_id}/start")
+def start_print(
+    printer_id: str,
+    body: StartPrintRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """G-Code-Datei auf Drucker laden und Druck starten. Bucht Kosten vom Guthaben ab."""
+    # 1. Aktive Belegung prüfen
+    occ = get_active_occupation(db, printer_id)
+    if not occ or occ.user_id != current_user.id or occ.status != OccupationStatus.occupied:
+        raise HTTPException(403, "Kein aktiver Zugriff auf diesen Drucker")
+
+    # 2. Datei prüfen
+    gfile = db.query(GCodeFile).filter(
+        GCodeFile.id == body.file_id,
+        GCodeFile.user_id == current_user.id,
+    ).first()
+    if not gfile:
+        raise HTTPException(404, "Datei nicht gefunden")
+
+    # 3. Kosten berechnen
+    filament_grams = _parse_filament_grams(gfile.filament_usage)
+    cost = calculate_cost(gfile.duration_seconds, filament_grams)
+
+    # 4. Balance prüfen
+    if current_user.balance_cents < cost:
+        raise HTTPException(
+            402,
+            f"Guthaben zu gering (benötigt: {cost} Cent, vorhanden: {current_user.balance_cents} Cent)",
+        )
+
+    # 5. Druck starten
+    ok = upload_and_start_print(printer_id, gfile.filepath, gfile.filename)
+    if not ok:
+        raise HTTPException(500, "Druck konnte nicht gestartet werden – Drucker erreichbar?")
+
+    # 6. Guthaben abbuchen
+    current_user.balance_cents -= cost
+    db.add(Transaction(
+        user_id=current_user.id,
+        type=TransactionType.charge,
+        amount_cents=-cost,
+        description=f"Druck: {gfile.filename} auf {PRINTERS.get(printer_id, {}).get('name', printer_id)}",
+    ))
+
+    # 7. Occupation aktualisieren
+    occ.file_id = body.file_id
+    occ.estimated_cost_cents = cost
+    occ.charged_cost_cents = cost
+    db.commit()
+
+    return {"ok": True, "charged_cents": cost}
 
 
 @router.get("/{printer_id}")

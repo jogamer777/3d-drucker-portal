@@ -6,11 +6,13 @@ from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import hash_password
 from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile
+from app.core.printer_client import PRINTERS, reload_printer_config, save_printer_config
 from app.schemas.schemas import (
     AdminUserOut, AdminUserUpdate, PasswordResetResponse,
     AdminMessageCreate, AdminMessageOut, AdminTransactionOut, ActivityLogOut,
@@ -244,6 +246,47 @@ def admin_delete_file(
 
     db.delete(gfile)
     db.commit()
+    return {"ok": True}
+
+
+@router.get("/printers/config")
+def get_printer_config(admin: User = Depends(require_admin)):
+    """Gibt konfigurierbare Drucker-Einstellungen zurück (API-Keys etc.)."""
+    result = {}
+    for pid, cfg in PRINTERS.items():
+        if cfg["api"] == "octoprint":
+            result[pid] = {
+                "name": cfg["name"],
+                "api_key": cfg.get("api_key", ""),
+                "webcam_path": cfg.get("webcam_path", ""),
+                "url": cfg.get("url", ""),
+            }
+    return result
+
+
+class OctoPrintConfig(BaseModel):
+    api_key: str
+    webcam_path: str = "/printers/crx/webcam"
+
+
+@router.put("/printers/config/{printer_id}")
+def update_printer_config(
+    printer_id: str,
+    body: OctoPrintConfig,
+    admin: User = Depends(require_admin),
+):
+    """Speichert OctoPrint API-Key und Webcam-Pfad persistent."""
+    if printer_id not in PRINTERS or PRINTERS[printer_id].get("api") != "octoprint":
+        raise HTTPException(404, "Drucker nicht gefunden oder kein OctoPrint-Drucker")
+    try:
+        save_printer_config({
+            printer_id: {
+                "api_key": body.api_key,
+                "webcam_path": body.webcam_path,
+            }
+        })
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
     return {"ok": True}
 
 

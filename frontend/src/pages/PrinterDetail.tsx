@@ -11,6 +11,18 @@ interface OccupationInfo {
   pickup_seconds_remaining: number
   user_display: string
   user_email: string | null
+  file_id?: number | null
+  estimated_cost_cents?: number | null
+  charged_cost_cents?: number | null
+}
+
+interface GCodeFileInfo {
+  id: number
+  filename: string
+  duration_seconds: number | null
+  filament_usage: string | null
+  thumbnail_b64: string | null
+  size_bytes: number
 }
 
 interface QueueInfo {
@@ -56,6 +68,32 @@ const STATE_CONFIG: Record<string, { label: string; dot: string; text: string }>
   pending_setup: { label: 'Einrichtung läuft', dot: 'bg-gray-300',   text: 'text-gray-500' },
 }
 
+const RATE_PER_HOUR_CENTS = 20
+const RATE_PER_GRAM_CENTS = 5
+
+function parseFilamentGrams(s: string | null): number {
+  if (!s) return 0
+  try {
+    const d = JSON.parse(s)
+    return Object.entries(d)
+      .filter(([k]) => k !== 'flush')
+      .reduce((sum, [, v]) => sum + (typeof v === 'number' ? v : 0), 0)
+  } catch { return 0 }
+}
+
+function estimateCost(dur: number | null, grams: number): number {
+  let cost = 0
+  if (dur && dur > 0) cost += Math.floor((dur / 3600) * RATE_PER_HOUR_CENTS)
+  cost += Math.floor(grams * RATE_PER_GRAM_CENTS)
+  return cost
+}
+
+function formatDuration(sec: number | null): string {
+  if (!sec || sec <= 0) return '—'
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60)
+  return h > 0 ? `${h} Std. ${m} Min.` : `${m} Min.`
+}
+
 const formatTime = (s: number) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
   return h > 0 ? `${h}h ${m}m` : `${m}m`
@@ -93,6 +131,140 @@ function useEtaCountdown(unixTs: number | null): number {
 }
 
 
+// ── Start Print Modal ──────────────────────────────────────────────────────────
+function StartPrintModal({
+  printerId,
+  userBalanceCents,
+  onClose,
+  onStarted,
+}: {
+  printerId: string
+  userBalanceCents: number
+  onClose: () => void
+  onStarted: () => void
+}) {
+  const [files, setFiles] = useState<GCodeFileInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<GCodeFileInfo | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.get('/files').then(r => setFiles(r.data)).catch(() => setError('Dateien konnten nicht geladen werden.')).finally(() => setLoading(false))
+  }, [])
+
+  const doStart = async () => {
+    if (!selected) return
+    setStarting(true)
+    setError('')
+    try {
+      await api.post(`/printers/${printerId}/start`, { file_id: selected.id })
+      onStarted()
+    } catch (e: any) {
+      const detail = e.response?.data?.detail ?? 'Fehler beim Starten'
+      setError(detail)
+    } finally {
+      setStarting(false)
+    }
+  }
+
+  const selectedGrams = selected ? parseFilamentGrams(selected.filament_usage) : 0
+  const selectedCost = selected ? estimateCost(selected.duration_seconds, selectedGrams) : 0
+  const canAfford = userBalanceCents >= selectedCost
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
+      <div className="bg-white rounded-xl max-w-lg w-full shadow-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-900">Druck starten</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        {loading && <div className="p-6 text-center text-sm text-gray-400">Lade Dateien...</div>}
+        {!loading && files.length === 0 && (
+          <div className="p-6 text-center text-sm text-gray-500">
+            Keine G-Code-Dateien vorhanden.<br />
+            <a href="/dateien" className="text-blue-600 hover:underline text-xs mt-1 inline-block">Dateien hochladen →</a>
+          </div>
+        )}
+
+        {!loading && files.length > 0 && (
+          <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
+            {files.map(f => {
+              const grams = parseFilamentGrams(f.filament_usage)
+              const cost = estimateCost(f.duration_seconds, grams)
+              const isSelected = selected?.id === f.id
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => setSelected(isSelected ? null : f)}
+                  className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50 border-l-2 border-blue-500' : ''}`}
+                >
+                  {f.thumbnail_b64 ? (
+                    <img src={f.thumbnail_b64} alt="" className="w-12 h-12 object-cover rounded shrink-0 border border-gray-200" />
+                  ) : (
+                    <div className="w-12 h-12 bg-gray-100 rounded shrink-0 flex items-center justify-center text-gray-300 text-xl">◻</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{f.filename}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {formatDuration(f.duration_seconds)}
+                      {grams > 0 && <span> · {grams.toFixed(1)} g</span>}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`text-sm font-semibold ${cost === 0 ? 'text-green-600' : 'text-gray-800'}`}>
+                      {cost === 0 ? 'kostenlos' : `${(cost / 100).toFixed(2)} €`}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-100 space-y-3">
+          {selected && (
+            <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Ausgewählt:</span>
+                <span className="font-medium text-gray-900 truncate max-w-[200px]">{selected.filename}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Kosten:</span>
+                <span className="font-medium text-gray-900">{selectedCost === 0 ? 'kostenlos' : `${(selectedCost / 100).toFixed(2)} €`}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Guthaben danach:</span>
+                <span className={`font-medium ${canAfford ? 'text-gray-900' : 'text-red-600'}`}>
+                  {((userBalanceCents - selectedCost) / 100).toFixed(2)} €
+                </span>
+              </div>
+            </div>
+          )}
+
+          {selected && !canAfford && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800">
+              Guthaben zu gering. Bitte Gutschein einlösen.
+            </div>
+          )}
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
+          <button
+            onClick={doStart}
+            disabled={!selected || starting || !canAfford}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+          >
+            {starting ? 'Startet...' : 'Druck starten'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Webcam Komponente (MJPEG) ─────────────────────────────────────────────────
 function WebcamView({ src, name }: { src: string; name: string }) {
   const [error, setError] = useState(false)
@@ -117,7 +289,7 @@ function WebcamView({ src, name }: { src: string; name: string }) {
 export default function PrinterDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user } = useAuthStore()
+  const { user, setAuth, accessToken } = useAuthStore()
   const isAdmin = user?.role === 'admin' || user?.role === 'power_user'
 
   const [printer, setPrinter] = useState<PrinterStatus | null>(null)
@@ -126,6 +298,7 @@ export default function PrinterDetail() {
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
+  const [showStartModal, setShowStartModal] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const load = useCallback(async () => {
@@ -443,11 +616,17 @@ export default function PrinterDetail() {
           {actionError && <p className="text-xs text-red-600">{actionError}</p>}
 
           {/* Aktions-Buttons */}
-          <div className="flex gap-2 pt-1">
+          <div className="flex gap-2 pt-1 flex-wrap">
             {canClaim && !notified && (
               <button onClick={claim} disabled={actionLoading}
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg">
                 Drucker beanspruchen
+              </button>
+            )}
+            {iAmOccupying && !iAmAwaiting && !['printing', 'paused'].includes(p.state) && (
+              <button onClick={() => setShowStartModal(true)} disabled={actionLoading}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg">
+                Druck starten
               </button>
             )}
             {iAmOccupying && !iAmAwaiting && (
@@ -466,6 +645,24 @@ export default function PrinterDetail() {
 
         </div>
       </div>
+
+      {/* Druck-Start-Modal */}
+      {showStartModal && (
+        <StartPrintModal
+          printerId={id!}
+          userBalanceCents={user?.balance_cents ?? 0}
+          onClose={() => setShowStartModal(false)}
+          onStarted={async () => {
+            setShowStartModal(false)
+            load()
+            // Guthaben im Store aktualisieren
+            try {
+              const r = await api.get('/user/me')
+              if (accessToken && user) setAuth(accessToken, r.data)
+            } catch {}
+          }}
+        />
+      )}
 
       {/* Bestätigungs-Modal */}
       {confirmAction && (

@@ -152,9 +152,12 @@ class PrinterOccupation(Base):
     user_id         = Column(Integer, ForeignKey("users.id"), nullable=False)
     status          = Column(Enum(OccupationStatus), default=OccupationStatus.occupied, nullable=False)
     claimed_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
-    completed_at    = Column(DateTime, nullable=True)   # Moonraker meldet "complete"
+    completed_at    = Column(DateTime, nullable=True)   # Drucker meldet "complete"
     pickup_deadline = Column(DateTime, nullable=True)   # completed_at + 24h
     released_at     = Column(DateTime, nullable=True)
+    file_id              = Column(Integer, ForeignKey("gcode_files.id"), nullable=True)
+    estimated_cost_cents = Column(Integer, nullable=True)
+    charged_cost_cents   = Column(Integer, nullable=True)
 
     user = relationship("User", back_populates="occupations")
 
