@@ -1,5 +1,10 @@
+import asyncio
+import base64
+import json
+import urllib.request
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -69,6 +74,82 @@ def list_printers(
 ):
     statuses = get_all_printers()
     return [_enrich(s, db, current_user.id) for s in statuses]
+
+
+_K2_SIGNALING_URL = "http://172.17.130.88:8000/call/webrtc_local"
+
+
+@router.post("/{printer_id}/whip", include_in_schema=False)
+async def webrtc_whip_adapter(printer_id: str, request: Request):
+    """
+    WHIP-Adapter: go2rtc sendet SDP-Offer als text/plain,
+    wir wrappen es in Creality's Base64-JSON-Format und leiten es an den K2 weiter.
+    """
+    if printer_id != "k2":
+        raise HTTPException(400, "WebRTC nur für K2 verfügbar")
+
+    sdp_offer = (await request.body()).decode("utf-8")
+    if not sdp_offer.strip().startswith("v="):
+        raise HTTPException(400, "Ungültiges SDP")
+
+    # K2 benötigt CRLF-Zeilenenden (go2rtc sendet LF)
+    sdp_offer_crlf = sdp_offer.replace("\r\n", "\n").replace("\n", "\r\n")
+
+    payload = base64.b64encode(
+        json.dumps({"type": "offer", "sdp": sdp_offer_crlf}).encode()
+    ).decode()
+
+    try:
+        req = urllib.request.Request(
+            _K2_SIGNALING_URL,
+            data=payload.encode(),
+            headers={"Content-Type": "plain/text"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read().decode()
+        answer = json.loads(base64.b64decode(raw))
+        sdp_answer = answer.get("sdp", "")
+    except Exception as e:
+        raise HTTPException(502, f"K2 Signaling Fehler: {e}")
+
+    return Response(
+        content=sdp_answer,
+        media_type="application/sdp",
+        status_code=201,
+    )
+
+
+_GO2RTC_FRAME_URL = "http://127.0.0.1:1985/api/frame.jpeg?src=k2_h264"
+
+
+@router.get("/k2/webcam", include_in_schema=False)
+async def k2_webcam_mjpeg():
+    """MJPEG-Stream: pollt go2rtc frame.jpeg und streamt als multipart."""
+    async def generate():
+        loop = asyncio.get_event_loop()
+        while True:
+            try:
+                def fetch():
+                    with urllib.request.urlopen(_GO2RTC_FRAME_URL, timeout=3) as r:
+                        return r.read()
+                frame = await loop.run_in_executor(None, fetch)
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n"
+                    b"Content-Length: " + str(len(frame)).encode() + b"\r\n\r\n"
+                    + frame + b"\r\n"
+                )
+            except Exception:
+                await asyncio.sleep(0.5)
+                continue
+            await asyncio.sleep(0.15)  # ~7 fps
+
+    return StreamingResponse(
+        generate(),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )
 
 
 class ControlRequest(BaseModel):

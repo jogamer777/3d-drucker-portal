@@ -16,7 +16,7 @@ PRINTERS: dict[str, dict] = {
         "name": "K2 Plus Combo",
         "api": "moonraker",
         "url": "http://172.17.130.88:4408",
-        "webcam_path": "/printers/k2/webcam",   # MJPEG via go2rtc (WebRTC -> MJPEG server-seitig)
+        "webcam_path": "/api/printers/k2/webcam",  # MJPEG via FastAPI → go2rtc frame.jpeg
     },
     "crx": {
         "name": "CR-X Pro",
