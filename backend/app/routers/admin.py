@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import hash_password
-from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile
+from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus
 from app.core.printer_client import PRINTERS, reload_printer_config, save_printer_config
+from app.core.email import get_email_config, save_email_config, send_email, reload_email_config
 from app.schemas.schemas import (
     AdminUserOut, AdminUserUpdate, PasswordResetResponse,
     AdminMessageCreate, AdminMessageOut, AdminTransactionOut, ActivityLogOut,
@@ -287,6 +288,99 @@ def update_printer_config(
         })
     except RuntimeError as e:
         raise HTTPException(500, str(e))
+    return {"ok": True}
+
+
+@router.get("/stats")
+def get_stats(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    from datetime import date
+    from sqlalchemy import func
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+
+    users_total = db.query(func.count(User.id)).scalar() or 0
+
+    # Umsatz = alle positiven Transaktionen (topup/refund), negativ = charges
+    # Für "Umsatz" nehmen wir Druckkosten (charge-Transaktionen, Beträge sind negativ)
+    revenue_all = db.query(func.sum(Transaction.amount_cents)).filter(
+        Transaction.type == TransactionType.charge,
+    ).scalar() or 0
+    revenue_month = db.query(func.sum(Transaction.amount_cents)).filter(
+        Transaction.type == TransactionType.charge,
+        Transaction.created_at >= month_start,
+    ).scalar() or 0
+
+    prints_completed = db.query(func.count(PrinterOccupation.id)).filter(
+        PrinterOccupation.status.in_([OccupationStatus.awaiting_pickup, OccupationStatus.released]),
+        PrinterOccupation.file_id != None,
+    ).scalar() or 0
+
+    active_occupations = db.query(func.count(PrinterOccupation.id)).filter(
+        PrinterOccupation.status == OccupationStatus.occupied,
+    ).scalar() or 0
+
+    pending_queue = db.query(func.count(QueueEntry.id)).filter(
+        QueueEntry.status.in_([QueueStatus.waiting, QueueStatus.notified]),
+    ).scalar() or 0
+
+    storage_total = db.query(func.sum(User.storage_used_bytes)).scalar() or 0
+
+    return {
+        "users_total": users_total,
+        "revenue_all_time_cents": abs(revenue_all),
+        "revenue_this_month_cents": abs(revenue_month),
+        "prints_completed": prints_completed,
+        "active_occupations": active_occupations,
+        "pending_queue_entries": pending_queue,
+        "storage_used_total_bytes": storage_total,
+    }
+
+
+@router.get("/email-config")
+def get_email_config_endpoint(admin: User = Depends(require_admin)):
+    cfg = get_email_config()
+    # Passwort nicht zurückgeben
+    cfg.pop("smtp_password", None)
+    return cfg
+
+
+class EmailConfig(BaseModel):
+    enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_address: str = ""
+    use_tls: bool = True
+    use_ssl: bool = False
+
+
+@router.put("/email-config")
+def update_email_config(
+    body: EmailConfig,
+    admin: User = Depends(require_admin),
+):
+    cfg = body.dict()
+    # Leeres Passwort = unverändertes Passwort beibehalten
+    if not cfg["smtp_password"]:
+        existing = get_email_config()
+        cfg["smtp_password"] = existing.get("smtp_password", "")
+    save_email_config(cfg)
+    return {"ok": True}
+
+
+@router.post("/email-config/test")
+def test_email_config(admin: User = Depends(require_admin)):
+    ok = send_email(
+        to=admin.email,
+        subject="Test-Mail – 3D-Drucker-Portal",
+        body="Diese E-Mail bestätigt, dass deine SMTP-Konfiguration funktioniert.",
+    )
+    if not ok:
+        raise HTTPException(500, "E-Mail konnte nicht gesendet werden. Konfiguration prüfen.")
     return {"ok": True}
 
 

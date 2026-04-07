@@ -182,3 +182,28 @@ class QueueEntry(Base):
     notified_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="queue_entries")
+
+
+# ── Auflade-Anträge ────────────────────────────────────────────────────────────
+
+class TopupRequestStatus(str, enum.Enum):
+    pending  = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class TopupRequest(Base):
+    __tablename__ = "topup_requests"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False)
+    amount_cents    = Column(Integer, nullable=False)
+    note            = Column(String, nullable=True)
+    status          = Column(Enum(TopupRequestStatus), default=TopupRequestStatus.pending, nullable=False)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+    processed_at    = Column(DateTime, nullable=True)
+    processed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    admin_note      = Column(String, nullable=True)
+
+    user      = relationship("User", foreign_keys=[user_id])
+    processor = relationship("User", foreign_keys=[processed_by_id])

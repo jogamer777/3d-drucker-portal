@@ -1,15 +1,18 @@
 import { useState } from 'react'
+import StatsTab from './StatsTab'
 import UsersTab from './UsersTab'
 import VouchersTab from './VouchersTab'
 import TransactionsTab from './TransactionsTab'
 import ActivityTab from './ActivityTab'
 import FilesTab from './FilesTab'
 import PrintersTab from './PrintersTab'
+import TopupRequestsTab from './TopupRequestsTab'
+import EmailConfigTab from './EmailConfigTab'
 
-type Tab = 'users' | 'vouchers' | 'transactions' | 'activity' | 'files' | 'printers'
+type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'email'
 
 export default function AdminPanel() {
-  const [tab, setTab] = useState<Tab>('users')
+  const [tab, setTab] = useState<Tab>('stats')
 
   return (
     <div>
@@ -18,12 +21,15 @@ export default function AdminPanel() {
       {/* Tab-Navigation */}
       <div className="flex flex-wrap border-b border-gray-200 mb-6">
         {([
+          ['stats', 'Statistik'],
           ['users', 'Nutzer'],
           ['vouchers', 'Gutscheine'],
+          ['topup', 'Aufladung'],
           ['transactions', 'Finanzen'],
           ['activity', 'Aktivität'],
           ['files', 'Dateien'],
           ['printers', 'Drucker'],
+          ['email', 'E-Mail'],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -40,12 +46,15 @@ export default function AdminPanel() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6">
+        {tab === 'stats' && <StatsTab />}
         {tab === 'users' && <UsersTab />}
         {tab === 'vouchers' && <VouchersTab />}
+        {tab === 'topup' && <TopupRequestsTab />}
         {tab === 'transactions' && <TransactionsTab />}
         {tab === 'activity' && <ActivityTab />}
         {tab === 'files' && <FilesTab />}
         {tab === 'printers' && <PrintersTab />}
+        {tab === 'email' && <EmailConfigTab />}
       </div>
     </div>
   )

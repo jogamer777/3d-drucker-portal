@@ -1,7 +1,7 @@
 from typing import Optional, List
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
-from app.models.models import UserRole, VoucherStatus, TransactionType
+from app.models.models import UserRole, VoucherStatus, TransactionType, TopupRequestStatus
 
 
 class UserRegister(BaseModel):
@@ -172,6 +172,35 @@ class PrintHistoryOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+# ── Topup Requests ────────────────────────────────────────────────────────────
+
+class TopupRequestCreate(BaseModel):
+    amount_cents: int
+    note: Optional[str] = None
+
+
+class TopupRequestOut(BaseModel):
+    id: int
+    user_id: int
+    amount_cents: int
+    note: Optional[str]
+    status: TopupRequestStatus
+    created_at: datetime
+    processed_at: Optional[datetime]
+    admin_note: Optional[str]
+
+    class Config:
+        orm_mode = True
+
+
+class AdminTopupRequestOut(TopupRequestOut):
+    user_email: str
+
+
+class TopupRejectRequest(BaseModel):
+    admin_note: Optional[str] = None
 
 
 # ── Activity Log ──────────────────────────────────────────────────────────────

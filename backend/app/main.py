@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base, SessionLocal
-from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations
+from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations, topup
 
 # Datenbank-Tabellen erstellen (neue Tabellen werden automatisch angelegt)
 Base.metadata.create_all(bind=engine)
@@ -11,7 +11,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="3D-Drucker-Portal",
     description="Webplattform zur Verwaltung von 3D-Druckern in einer Schülerfirma",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 app.add_middleware(
@@ -35,6 +35,7 @@ app.include_router(admin.router)
 app.include_router(files.router)
 app.include_router(printers.router)
 app.include_router(reservations.router)
+app.include_router(topup.router)
 
 
 async def _reservation_cleanup_loop():
@@ -77,4 +78,4 @@ async def startup_tasks():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.4.0"}
+    return {"status": "ok", "version": "0.5.0"}

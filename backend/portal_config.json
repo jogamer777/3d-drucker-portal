@@ -1,0 +1,12 @@
+{
+  "email": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_password": "",
+    "from_address": "",
+    "use_tls": true,
+    "use_ssl": false
+  }
+}

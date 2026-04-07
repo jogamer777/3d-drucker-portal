@@ -10,6 +10,7 @@ from app.models.models import (
     QueueEntry, QueueStatus,
 )
 from app.core.printer_client import _cache as printer_cache, CACHE_TTL, PRINTERS, get_printer_status
+from app.core.email import send_email
 
 QUEUE_NOTIFY_TIMEOUT_MINUTES = 5
 PICKUP_WINDOW_HOURS = 24
@@ -86,6 +87,25 @@ def advance_queue(db: Session, printer_id: str):
     next_entry.notified_at = now
     db.commit()
 
+    # E-Mail an den nächsten Nutzer in der Warteschlange
+    try:
+        from app.models.models import User as _User
+        notify_user = db.query(_User).filter(_User.id == next_entry.user_id).first()
+        if notify_user:
+            send_email(
+                to=notify_user.email,
+                subject=f"Du bist dran! Drucker {printer_id} ist frei – 3D-Drucker-Portal",
+                body=(
+                    f"Hallo,\n\n"
+                    f"du bist jetzt an der Reihe! Drucker {printer_id} ist frei.\n"
+                    f"Du hast {QUEUE_NOTIFY_TIMEOUT_MINUTES} Minuten, um den Drucker zu beanspruchen.\n\n"
+                    f"→ Jetzt zum Portal: https://172.17.129.228/drucker/{printer_id}\n\n"
+                    f"– Das 3D-Drucker-Portal"
+                ),
+            )
+    except Exception:
+        pass
+
 
 def expire_and_advance(db: Session):
     """
@@ -131,6 +151,28 @@ def expire_and_advance(db: Session):
 
     if occupied:
         db.commit()
+        # E-Mail bei Druckabschluss (nach commit, für frisch geänderte Einträge)
+        for occ in occupied:
+            if occ.status == OccupationStatus.awaiting_pickup and occ.completed_at and \
+               abs((occ.completed_at - now).total_seconds()) < 35:  # frisch geändert
+                try:
+                    from app.models.models import User as _User
+                    print_user = db.query(_User).filter(_User.id == occ.user_id).first()
+                    if print_user:
+                        printer_name = PRINTERS.get(occ.printer_id, {}).get("name", occ.printer_id)
+                        send_email(
+                            to=print_user.email,
+                            subject=f"Druck fertig – {printer_name} – 3D-Drucker-Portal",
+                            body=(
+                                f"Hallo,\n\n"
+                                f"dein Druck auf {printer_name} ist fertig!\n"
+                                f"Bitte hole ihn innerhalb von {PICKUP_WINDOW_HOURS} Stunden ab.\n\n"
+                                f"→ Zum Portal: https://172.17.129.228/drucker/{occ.printer_id}\n\n"
+                                f"– Das 3D-Drucker-Portal"
+                            ),
+                        )
+                except Exception:
+                    pass
 
     # 3. Queue-Advance für frisch released Occupations
     released = db.query(PrinterOccupation).filter(
