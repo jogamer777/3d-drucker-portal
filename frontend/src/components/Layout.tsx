@@ -36,6 +36,7 @@ export default function Layout() {
           <nav className="hidden md:flex items-center gap-6">
             {navLink('/drucker', 'Drucker')}
             {navLink('/dateien', 'Meine Dateien')}
+            {navLink('/drucke', 'Meine Drucke')}
             {navLink('/guthaben', 'Guthaben')}
             {user?.role === 'admin' && navLink('/admin', 'Admin')}
           </nav>
@@ -50,6 +51,13 @@ export default function Layout() {
                   {formatBalance(user.balance_cents)}
                 </Link>
                 <span className="text-sm text-gray-500 hidden sm:block truncate max-w-32">{user.email}</span>
+                <Link
+                  to="/einstellungen"
+                  className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors hidden sm:block"
+                  title="Einstellungen"
+                >
+                  ⚙️
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="text-sm text-gray-600 hover:text-gray-900 border border-gray-300 px-3 py-1.5 rounded-md hover:bg-gray-50 transition-colors"

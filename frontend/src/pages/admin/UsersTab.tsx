@@ -25,6 +25,7 @@ interface AdminMessage {
 
 export default function UsersTab() {
   const [users, setUsers] = useState<AdminUser[]>([])
+  const [userSearch, setUserSearch] = useState('')
   const [messages, setMessages] = useState<AdminMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [resetModal, setResetModal] = useState<{ userId: number; email: string } | null>(null)
@@ -147,7 +148,16 @@ export default function UsersTab() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-gray-500">{users.length} Nutzer gesamt</p>
-        <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={userSearch}
+            onChange={e => setUserSearch(e.target.value)}
+            placeholder="E-Mail suchen..."
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+          />
+          <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
@@ -163,7 +173,7 @@ export default function UsersTab() {
             </tr>
           </thead>
           <tbody>
-            {users.map(u => {
+            {users.filter(u => u.email.toLowerCase().includes(userSearch.toLowerCase())).map(u => {
               const reply = getUserReply(u.id)
               return (
                 <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">

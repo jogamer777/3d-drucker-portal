@@ -159,6 +159,21 @@ class MessageReplyRequest(BaseModel):
     reply: str
 
 
+# ── Print History ─────────────────────────────────────────────────────────────
+
+class PrintHistoryOut(BaseModel):
+    id: int
+    printer_id: str
+    filename: Optional[str]
+    claimed_at: datetime
+    completed_at: Optional[datetime]
+    charged_cost_cents: Optional[int]
+    status: str
+
+    class Config:
+        orm_mode = True
+
+
 # ── Activity Log ──────────────────────────────────────────────────────────────
 
 # ── Files ─────────────────────────────────────────────────────────────────────

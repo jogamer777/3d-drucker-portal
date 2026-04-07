@@ -9,6 +9,8 @@ import Files from './pages/Files'
 import AdminPanel from './pages/admin/AdminPanel'
 import Printers from './pages/Printers'
 import PrinterDetail from './pages/PrinterDetail'
+import Prints from './pages/Prints'
+import Settings from './pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuthStore()
@@ -36,6 +38,8 @@ export default function App() {
           <Route path="/drucker" element={<Printers />} />
           <Route path="/drucker/:id" element={<PrinterDetail />} />
           <Route path="/dateien" element={<Files />} />
+          <Route path="/drucke" element={<Prints />} />
+          <Route path="/einstellungen" element={<Settings />} />
         </Route>
 
         <Route element={<AdminRoute><Layout /></AdminRoute>}>

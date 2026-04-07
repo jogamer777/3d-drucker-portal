@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import decode_token
-from app.models.models import User, UserRole, AdminMessage
-from app.schemas.schemas import UserOut, UserMessageOut, MessageReplyRequest
+from app.core.security import decode_token, verify_password, hash_password
+from app.models.models import User, UserRole, AdminMessage, PrinterOccupation, OccupationStatus, GCodeFile
+from app.schemas.schemas import UserOut, UserMessageOut, MessageReplyRequest, PrintHistoryOut
+from pydantic import BaseModel
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -125,3 +126,58 @@ def mark_message_read(
         reply=msg.reply,
         replied_at=msg.replied_at,
     )
+
+
+@router.get("/prints", response_model=List[PrintHistoryOut])
+def get_print_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    occupations = (
+        db.query(PrinterOccupation)
+        .filter(
+            PrinterOccupation.user_id == current_user.id,
+            PrinterOccupation.status.in_([OccupationStatus.awaiting_pickup, OccupationStatus.released]),
+            PrinterOccupation.file_id != None,
+        )
+        .order_by(PrinterOccupation.completed_at.desc())
+        .limit(100)
+        .all()
+    )
+    result = []
+    for occ in occupations:
+        filename = None
+        if occ.file_id:
+            gfile = db.query(GCodeFile).filter(GCodeFile.id == occ.file_id).first()
+            if gfile:
+                filename = gfile.filename
+        result.append(PrintHistoryOut(
+            id=occ.id,
+            printer_id=occ.printer_id,
+            filename=filename,
+            claimed_at=occ.claimed_at,
+            completed_at=occ.completed_at,
+            charged_cost_cents=occ.charged_cost_cents,
+            status=occ.status.value,
+        ))
+    return result
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.patch("/me")
+def update_me(
+    data: PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not verify_password(data.current_password, current_user.password_hash):
+        raise HTTPException(400, "Aktuelles Passwort falsch")
+    if len(data.new_password) < 8:
+        raise HTTPException(400, "Neues Passwort muss mindestens 8 Zeichen haben")
+    current_user.password_hash = hash_password(data.new_password)
+    db.commit()
+    return {"ok": True}

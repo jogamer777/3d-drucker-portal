@@ -172,6 +172,7 @@ export default function Dashboard() {
         {[
           { to: '/drucker', icon: '🖨️', label: 'Drucker', sub: 'Status & Drucken' },
           { to: '/dateien', icon: '📁', label: 'Meine Dateien', sub: 'G-Code verwalten' },
+          { to: '/drucke', icon: '📋', label: 'Meine Drucke', sub: 'Druckverlauf & Kosten' },
           { to: '/guthaben', icon: '💳', label: 'Guthaben', sub: 'Aufladen & Verlauf' },
           ...(user?.role === 'admin' ? [{ to: '/admin', icon: '⚙️', label: 'Admin', sub: 'Nutzer & Gutscheine' }] : []),
         ].map(item => (

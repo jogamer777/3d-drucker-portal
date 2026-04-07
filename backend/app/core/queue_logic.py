@@ -9,7 +9,7 @@ from app.models.models import (
     PrinterOccupation, OccupationStatus,
     QueueEntry, QueueStatus,
 )
-from app.core.printer_client import _cache as printer_cache, CACHE_TTL
+from app.core.printer_client import _cache as printer_cache, CACHE_TTL, PRINTERS, get_printer_status
 
 QUEUE_NOTIFY_TIMEOUT_MINUTES = 5
 PICKUP_WINDOW_HOURS = 24
@@ -108,16 +108,23 @@ def expire_and_advance(db: Session):
     if expired_pickups:
         db.commit()
 
-    # 2. Moonraker "complete" erkennen für occupied printers
+    # 2. Print-Abschluss erkennen für occupied printers (Moonraker + OctoPrint)
+    import time
     occupied = db.query(PrinterOccupation).filter(
         PrinterOccupation.status == OccupationStatus.occupied,
     ).all()
     for occ in occupied:
-        cached, ts = printer_cache.get(occ.printer_id, ({}, 0.0))
-        import time
-        if time.time() - ts < CACHE_TTL * 4:   # max 20s alt
-            moonraker_state = cached.get("state")
-            if moonraker_state == "complete":
+        cfg = PRINTERS.get(occ.printer_id, {})
+        if cfg.get("api") == "moonraker":
+            cached, ts = printer_cache.get(occ.printer_id, ({}, 0.0))
+            if time.time() - ts < CACHE_TTL * 4:   # max 20s alt
+                if cached.get("state") == "complete":
+                    occ.status = OccupationStatus.awaiting_pickup
+                    occ.completed_at = now
+                    occ.pickup_deadline = now + timedelta(hours=PICKUP_WINDOW_HOURS)
+        elif cfg.get("api") == "octoprint" and occ.file_id is not None:
+            status = get_printer_status(occ.printer_id)
+            if status and status.get("state") == "idle":
                 occ.status = OccupationStatus.awaiting_pickup
                 occ.completed_at = now
                 occ.pickup_deadline = now + timedelta(hours=PICKUP_WINDOW_HOURS)
