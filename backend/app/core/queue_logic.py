@@ -134,3 +134,15 @@ def expire_and_advance(db: Session):
         # Nur wenn keine neue aktive Occupation für diesen Drucker
         if not get_active_occupation(db, occ.printer_id):
             advance_queue(db, occ.printer_id)
+
+    # 4. Externer Druck: Drucker auf idle/complete aber keine aktive Occupation
+    #    → Queue vorrücken (Druck außerhalb Portal abgeschlossen)
+    import time as _time
+    from app.core.printer_client import PRINTERS as _PRINTERS
+    for pid in _PRINTERS:
+        if get_active_occupation(db, pid):
+            continue
+        cached_data, ts = printer_cache.get(pid, ({}, 0.0))
+        if _time.time() - ts < CACHE_TTL * 4:
+            if cached_data.get("state") in ("idle", "complete"):
+                advance_queue(db, pid)

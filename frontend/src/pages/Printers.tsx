@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 
 interface OccupationInfo {
@@ -7,6 +8,8 @@ interface OccupationInfo {
   status: 'occupied' | 'awaiting_pickup'
   pickup_deadline: string | null
   pickup_seconds_remaining: number
+  user_display: string
+  user_email: string | null
 }
 
 interface QueueInfo {
@@ -30,9 +33,16 @@ interface PrinterStatus {
   temp_bed: number
   temp_bed_target: number
   webcam_path: string | null
+  layer: number | null
+  layer_count: number | null
+  z_pos: number
+  filament_used_mm: number
+  estimated_end_time: number | null
+  filament_type: string | null
   occupation: OccupationInfo | null
   queue_count: number
   my_queue: QueueInfo | null
+  external_print: boolean
 }
 
 const STATE_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
@@ -72,6 +82,7 @@ function useCountdown(isoDate: string | null): number {
 
 // ── PrinterCard ────────────────────────────────────────────────────────────────
 function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void }) {
+  const navigate = useNavigate()
   const cfg = STATE_CONFIG[p.state] ?? STATE_CONFIG.offline
   const showProgress = p.online && ['printing', 'paused'].includes(p.state)
   const showTemps = p.online && p.state !== 'pending_setup'
@@ -90,8 +101,8 @@ function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void
   const canClaim = p.online && !p.occupation && !p.my_queue && ['idle', 'complete'].includes(p.state)
   const canClaimAfterNotified = notified && !p.occupation
 
-  // Kann in Warteschlange: Drucker belegt, ich nicht drin, keine eigene Belegung
-  const canQueue = !!p.occupation && !p.occupation.is_mine && !p.my_queue
+  // Kann in Warteschlange: Drucker belegt oder externer Druck, ich nicht drin
+  const canQueue = ((!!p.occupation && !p.occupation.is_mine) || p.external_print) && !p.my_queue
 
   const doAction = async (fn: () => Promise<void>) => {
     setError('')
@@ -114,6 +125,19 @@ function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+
+      {/* Externer Druck Banner */}
+      {p.external_print && (
+        <div className="bg-orange-50 border-b border-orange-200 px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⚠️</span>
+            <p className="text-sm font-semibold text-orange-800">Außerhalb Portal gestartet</p>
+          </div>
+          <p className="text-xs text-orange-600 mt-1">
+            Dieser Druck wurde nicht über das Portal gestartet und ist keinem Nutzer zugeordnet.
+          </p>
+        </div>
+      )}
 
       {/* "Du bist dran!" Banner */}
       {notified && (
@@ -171,8 +195,9 @@ function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-4 pb-3">
+      {/* Header – klickbar für Detail-Seite */}
+      <div className="flex items-center justify-between px-5 pt-4 pb-3 cursor-pointer hover:bg-gray-50 transition-colors"
+           onClick={() => navigate(`/drucker/${p.id}`)}>
         <div>
           <h2 className="font-semibold text-gray-900">{p.name}</h2>
           <div className="flex items-center gap-1.5 mt-0.5">

@@ -89,13 +89,21 @@ def _fetch_moonraker(pid: str, cfg: dict) -> dict:
     raw_state = ps.get("state", "standby")
     state = _MOONRAKER_STATE_MAP.get(raw_state, "idle")
 
-    progress_raw = s.get("display_status", {}).get("progress") or \
-                   s.get("virtual_sdcard", {}).get("progress", 0.0)
+    vsd = s.get("virtual_sdcard", {})
+    cur_data = vsd.get("cur_print_data", {})
+
+    # virtual_sdcard.progress ist der tatsächliche Datei-Fortschritt (genauer)
+    progress_raw = vsd.get("progress") or s.get("display_status", {}).get("progress", 0.0)
     progress = float(progress_raw)
 
     print_duration = float(ps.get("print_duration", 0))
+
+    # ETA aus Moonraker-Estimate (Unix-Timestamp), sonst berechnen
+    estimated_end_time: Optional[float] = cur_data.get("end_time")
     remaining: Optional[int] = None
-    if state in ("printing", "paused") and progress > 0.01:
+    if estimated_end_time:
+        remaining = max(0, int(estimated_end_time - time.time()))
+    elif state in ("printing", "paused") and progress > 0.01:
         remaining = int(print_duration * (1.0 - progress) / progress)
 
     extruder = s.get("extruder", {})
@@ -115,6 +123,13 @@ def _fetch_moonraker(pid: str, cfg: dict) -> dict:
         "temp_bed": round(float(bed.get("temperature", 0)), 1),
         "temp_bed_target": round(float(bed.get("target", 0)), 1),
         "webcam_path": cfg.get("webcam_path"),
+        # Erweiterte Felder für Detail-Seite
+        "layer":              vsd.get("layer") or None,
+        "layer_count":        vsd.get("layer_count") or None,
+        "z_pos":              round(float(ps.get("z_pos", 0)), 2),
+        "filament_used_mm":   round(float(ps.get("filament_used", 0)), 1),
+        "estimated_end_time": estimated_end_time,
+        "filament_type":      cur_data.get("metadata", {}).get("filament_type"),
     }
 
 
@@ -182,7 +197,46 @@ def _fetch_octoprint(pid: str, cfg: dict) -> dict:
         "temp_bed": round(float(bed.get("actual", 0)), 1),
         "temp_bed_target": round(float(bed.get("target", 0)), 1),
         "webcam_path": cfg.get("webcam_path"),
+        "layer": None,
+        "layer_count": None,
+        "z_pos": 0.0,
+        "filament_used_mm": 0.0,
+        "estimated_end_time": None,
+        "filament_type": None,
     }
+
+
+# ── Moonraker-Steuerbefehle ────────────────────────────────────────────────────
+
+_MOONRAKER_CONTROL_ENDPOINTS = {
+    "pause":          "/printer/print/pause",
+    "resume":         "/printer/print/resume",
+    "cancel":         "/printer/print/cancel",
+    "emergency_stop": "/printer/emergency_stop",
+}
+
+
+def send_moonraker_command(printer_id: str, action: str) -> bool:
+    """Sendet Steuerbefehl an Moonraker. Gibt True bei Erfolg zurück."""
+    cfg = PRINTERS.get(printer_id)
+    if not cfg or cfg.get("api") != "moonraker":
+        return False
+    endpoint = _MOONRAKER_CONTROL_ENDPOINTS.get(action)
+    if not endpoint:
+        return False
+    url = cfg["url"] + endpoint
+    try:
+        req = urllib.request.Request(
+            url, data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5):
+            pass
+        _cache.pop(printer_id, None)
+        return True
+    except Exception:
+        return False
 
 
 # ── Hilfsfunktionen ────────────────────────────────────────────────────────────
@@ -202,4 +256,10 @@ def _offline_status(pid: str, cfg: dict) -> dict:
         "temp_bed": 0.0,
         "temp_bed_target": 0.0,
         "webcam_path": cfg.get("webcam_path"),
+        "layer": None,
+        "layer_count": None,
+        "z_pos": 0.0,
+        "filament_used_mm": 0.0,
+        "estimated_end_time": None,
+        "filament_type": None,
     }

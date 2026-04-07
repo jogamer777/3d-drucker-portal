@@ -8,6 +8,7 @@ import Wallet from './pages/Wallet'
 import Files from './pages/Files'
 import AdminPanel from './pages/admin/AdminPanel'
 import Printers from './pages/Printers'
+import PrinterDetail from './pages/PrinterDetail'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuthStore()
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/guthaben" element={<Wallet />} />
           <Route path="/drucker" element={<Printers />} />
+          <Route path="/drucker/:id" element={<PrinterDetail />} />
           <Route path="/dateien" element={<Files />} />
         </Route>
 
