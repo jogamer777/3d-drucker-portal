@@ -203,6 +203,25 @@ class TopupRejectRequest(BaseModel):
     admin_note: Optional[str] = None
 
 
+# ── Maintenance Log ───────────────────────────────────────────────────────────
+
+class MaintenanceLogCreate(BaseModel):
+    action: str
+    notes: Optional[str] = None
+
+
+class MaintenanceLogOut(BaseModel):
+    id: int
+    printer_id: str
+    admin_email: Optional[str] = None
+    action: str
+    notes: Optional[str]
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
 # ── Activity Log ──────────────────────────────────────────────────────────────
 
 # ── Files ─────────────────────────────────────────────────────────────────────

@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import json
 import secrets
@@ -5,15 +7,17 @@ import string
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import hash_password
-from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus
+from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus, MaintenanceLog, MAINTENANCE_ACTIONS
 from app.core.printer_client import PRINTERS, reload_printer_config, save_printer_config
 from app.core.email import get_email_config, save_email_config, send_email, reload_email_config
+from app.core.portal_config import get_registration_open, set_registration_open
+from app.schemas.schemas import MaintenanceLogCreate, MaintenanceLogOut
 from app.schemas.schemas import (
     AdminUserOut, AdminUserUpdate, PasswordResetResponse,
     AdminMessageCreate, AdminMessageOut, AdminTransactionOut, ActivityLogOut,
@@ -382,6 +386,141 @@ def test_email_config(admin: User = Depends(require_admin)):
     if not ok:
         raise HTTPException(500, "E-Mail konnte nicht gesendet werden. Konfiguration prüfen.")
     return {"ok": True}
+
+
+@router.get("/portal-config")
+def get_portal_config_endpoint(admin: User = Depends(require_admin)):
+    return {"registration_open": get_registration_open()}
+
+
+class PortalConfigUpdate(BaseModel):
+    registration_open: bool
+
+
+@router.put("/portal-config")
+def update_portal_config(body: PortalConfigUpdate, admin: User = Depends(require_admin)):
+    set_registration_open(body.registration_open)
+    return {"ok": True, "registration_open": body.registration_open}
+
+
+# ── Wartungsprotokoll ─────────────────────────────────────────────────────────
+
+@router.get("/printers/{printer_id}/maintenance", response_model=List[MaintenanceLogOut])
+def list_maintenance(
+    printer_id: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if printer_id not in PRINTERS:
+        raise HTTPException(404, "Drucker nicht gefunden")
+    logs = (
+        db.query(MaintenanceLog)
+        .filter(MaintenanceLog.printer_id == printer_id)
+        .order_by(MaintenanceLog.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [MaintenanceLogOut(
+        id=log.id,
+        printer_id=log.printer_id,
+        admin_email=log.admin.email if log.admin else None,
+        action=log.action,
+        notes=log.notes,
+        created_at=log.created_at,
+    ) for log in logs]
+
+
+@router.post("/printers/{printer_id}/maintenance", response_model=MaintenanceLogOut, status_code=201)
+def create_maintenance(
+    printer_id: str,
+    data: MaintenanceLogCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    if printer_id not in PRINTERS:
+        raise HTTPException(404, "Drucker nicht gefunden")
+    if not data.action.strip():
+        raise HTTPException(400, "Aktion darf nicht leer sein")
+
+    log = MaintenanceLog(
+        printer_id=printer_id,
+        admin_id=admin.id,
+        action=data.action.strip(),
+        notes=data.notes.strip() if data.notes else None,
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return MaintenanceLogOut(
+        id=log.id,
+        printer_id=log.printer_id,
+        admin_email=admin.email,
+        action=log.action,
+        notes=log.notes,
+        created_at=log.created_at,
+    )
+
+
+@router.get("/maintenance-actions")
+def get_maintenance_actions(admin: User = Depends(require_admin)):
+    return MAINTENANCE_ACTIONS
+
+
+# ── CSV-Export ────────────────────────────────────────────────────────────────
+
+@router.get("/transactions/export")
+def export_transactions(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    txs = db.query(Transaction).order_by(Transaction.created_at.desc()).all()
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["ID", "Nutzer", "Typ", "Betrag (Cent)", "Betrag (EUR)", "Beschreibung", "Datum"])
+    for tx in txs:
+        writer.writerow([
+            tx.id,
+            tx.user.email if tx.user else "",
+            tx.type.value,
+            tx.amount_cents,
+            f"{tx.amount_cents / 100:.2f}".replace(".", ","),
+            tx.description,
+            tx.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        ])
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return Response(
+        content="\ufeff" + output.getvalue(),  # BOM für Excel
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="transaktionen_{today}.csv"'},
+    )
+
+
+@router.get("/users/export")
+def export_users(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["ID", "E-Mail", "Rolle", "Guthaben (Cent)", "Guthaben (EUR)", "Gesperrt", "Registriert", "Letzter Login"])
+    for u in users:
+        writer.writerow([
+            u.id,
+            u.email,
+            u.role.value,
+            u.balance_cents,
+            f"{u.balance_cents / 100:.2f}".replace(".", ","),
+            "Ja" if u.is_blocked else "Nein",
+            u.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            u.last_login_at.strftime("%Y-%m-%d %H:%M:%S") if u.last_login_at else "",
+        ])
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="nutzer_{today}.csv"'},
+    )
 
 
 @router.get("/messages", response_model=List[AdminMessageOut])

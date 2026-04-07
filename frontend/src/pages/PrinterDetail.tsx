@@ -299,6 +299,7 @@ export default function PrinterDetail() {
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
   const [showStartModal, setShowStartModal] = useState(false)
+  const [lastMaintenance, setLastMaintenance] = useState<{ action: string; notes: string | null; created_at: string } | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const load = useCallback(async () => {
@@ -314,6 +315,8 @@ export default function PrinterDetail() {
   useEffect(() => {
     load()
     intervalRef.current = setInterval(load, 3_000)
+    // Letzte Wartung einmalig laden
+    api.get(`/printers/${id}/maintenance/last`).then(r => setLastMaintenance(r.data)).catch(() => {})
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [load])
 
@@ -645,6 +648,23 @@ export default function PrinterDetail() {
 
         </div>
       </div>
+
+      {/* Letzte Wartung */}
+      {lastMaintenance && (
+        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <span className="text-lg mt-0.5">🔧</span>
+          <div>
+            <p className="text-xs font-medium text-gray-500">Letzte Wartung</p>
+            <p className="text-sm text-gray-800 font-medium">{lastMaintenance.action}</p>
+            {lastMaintenance.notes && (
+              <p className="text-xs text-gray-500">{lastMaintenance.notes}</p>
+            )}
+            <p className="text-xs text-gray-400 mt-0.5">
+              {new Date(lastMaintenance.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Druck-Start-Modal */}
       {showStartModal && (

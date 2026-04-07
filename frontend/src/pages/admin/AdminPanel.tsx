@@ -8,8 +8,9 @@ import FilesTab from './FilesTab'
 import PrintersTab from './PrintersTab'
 import TopupRequestsTab from './TopupRequestsTab'
 import EmailConfigTab from './EmailConfigTab'
+import PortalSettingsTab from './PortalSettingsTab'
 
-type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'email'
+type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'email' | 'settings'
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('stats')
@@ -30,6 +31,7 @@ export default function AdminPanel() {
           ['files', 'Dateien'],
           ['printers', 'Drucker'],
           ['email', 'E-Mail'],
+          ['settings', 'Einstellungen'],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -55,6 +57,7 @@ export default function AdminPanel() {
         {tab === 'files' && <FilesTab />}
         {tab === 'printers' && <PrintersTab />}
         {tab === 'email' && <EmailConfigTab />}
+        {tab === 'settings' && <PortalSettingsTab />}
       </div>
     </div>
   )

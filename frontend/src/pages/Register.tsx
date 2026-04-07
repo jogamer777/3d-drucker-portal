@@ -9,6 +9,7 @@ export default function Register() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [closed, setClosed] = useState(false)
   const { setAuth } = useAuthStore()
   const navigate = useNavigate()
 
@@ -36,10 +37,31 @@ export default function Register() {
       setAuth(access_token, meRes.data)
       navigate('/')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registrierung fehlgeschlagen')
+      if (err.response?.status === 403) {
+        setClosed(true)
+      } else {
+        setError(err.response?.data?.detail || 'Registrierung fehlgeschlagen')
+      }
     } finally {
       setLoading(false)
     }
+  }
+
+  if (closed) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 w-full max-w-sm text-center">
+          <div className="text-4xl mb-3">🔒</div>
+          <h1 className="text-xl font-semibold text-gray-900 mb-2">Registrierung geschlossen</h1>
+          <p className="text-sm text-gray-500 mb-4">
+            Die Registrierung ist derzeit nicht möglich. Bitte wende dich an einen Administrator.
+          </p>
+          <Link to="/login" className="text-sm text-blue-600 hover:underline">
+            Zur Anmeldung →
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (

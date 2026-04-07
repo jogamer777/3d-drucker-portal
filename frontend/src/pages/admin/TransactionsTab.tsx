@@ -64,7 +64,15 @@ export default function TransactionsTab() {
             >{label}</button>
           ))}
         </div>
-        <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => window.open('/api/admin/transactions/export', '_blank')}
+            className="text-sm border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+          >
+            CSV exportieren
+          </button>
+          <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        </div>
       </div>
 
       {loading ? (

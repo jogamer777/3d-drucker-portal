@@ -207,3 +207,28 @@ class TopupRequest(Base):
 
     user      = relationship("User", foreign_keys=[user_id])
     processor = relationship("User", foreign_keys=[processed_by_id])
+
+
+# ── Wartungsprotokoll ──────────────────────────────────────────────────────────
+
+MAINTENANCE_ACTIONS = [
+    "Düse getauscht",
+    "Bett eingestellt",
+    "Filament gewechselt",
+    "Druckbett gereinigt",
+    "Software-Update",
+    "Sonstiges",
+]
+
+
+class MaintenanceLog(Base):
+    __tablename__ = "maintenance_logs"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    printer_id = Column(String, nullable=False, index=True)
+    admin_id   = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action     = Column(String, nullable=False)
+    notes      = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    admin = relationship("User", foreign_keys=[admin_id])

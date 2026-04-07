@@ -156,6 +156,12 @@ export default function UsersTab() {
             placeholder="E-Mail suchen..."
             className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
           />
+          <button
+            onClick={() => window.open('/api/admin/users/export', '_blank')}
+            className="text-sm border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+          >
+            CSV exportieren
+          </button>
           <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
         </div>
       </div>

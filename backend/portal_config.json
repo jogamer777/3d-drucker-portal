@@ -1,4 +1,7 @@
 {
+  "registration": {
+    "open": true
+  },
   "email": {
     "enabled": false,
     "smtp_host": "",

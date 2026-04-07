@@ -5,6 +5,7 @@ from typing import Optional
 
 from app.core.database import get_db
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
+from app.core.portal_config import get_registration_open
 from app.core.config import MAX_FAILED_LOGINS, REFRESH_TOKEN_EXPIRE_DAYS
 from app.models.models import User, UserRole, ActivityLog
 from app.schemas.schemas import UserRegister, UserLogin, TokenResponse, UserOut
@@ -14,6 +15,9 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(data: UserRegister, response: Response, db: Session = Depends(get_db)):
+    if not get_registration_open():
+        raise HTTPException(status_code=403, detail="Registrierung ist derzeit geschlossen")
+
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="E-Mail bereits registriert")
 

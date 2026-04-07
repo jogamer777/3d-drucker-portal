@@ -259,6 +259,29 @@ def start_print(
     return {"ok": True, "charged_cents": cost}
 
 
+@router.get("/{printer_id}/maintenance/last")
+def printer_last_maintenance(
+    printer_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.models import MaintenanceLog
+    log = (
+        db.query(MaintenanceLog)
+        .filter(MaintenanceLog.printer_id == printer_id)
+        .order_by(MaintenanceLog.created_at.desc())
+        .first()
+    )
+    if not log:
+        return None
+    return {
+        "action": log.action,
+        "notes": log.notes,
+        "created_at": log.created_at.isoformat(),
+        "admin_email": log.admin.email if log.admin else None,
+    }
+
+
 @router.get("/{printer_id}")
 def printer_detail(
     printer_id: str,
