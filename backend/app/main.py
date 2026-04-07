@@ -52,8 +52,26 @@ async def _reservation_cleanup_loop():
             pass
 
 
+def _register_go2rtc_streams():
+    """K2-Webcam-Stream in bestehende go2rtc-Instanz registrieren."""
+    import urllib.request
+    import urllib.error
+    streams = {
+        "k2": "webrtc:http://172.17.130.88:8000/call/webrtc_local",
+    }
+    for name, src in streams.items():
+        url = f"http://127.0.0.1:1984/api/streams?name={name}&src={src}"
+        try:
+            req = urllib.request.Request(url, method="PUT")
+            with urllib.request.urlopen(req, timeout=3):
+                pass
+        except Exception:
+            pass  # go2rtc nicht verfügbar oder Stream bereits registriert
+
+
 @app.on_event("startup")
 async def startup_tasks():
+    _register_go2rtc_streams()
     asyncio.create_task(_reservation_cleanup_loop())
 
 

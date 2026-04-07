@@ -92,84 +92,22 @@ function useEtaCountdown(unixTs: number | null): number {
   return secs
 }
 
-// ── WebRTC Webcam Komponente ───────────────────────────────────────────────────
-function WebRtcStream({ signalingUrl }: { signalingUrl: string }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const pcRef = useRef<RTCPeerConnection | null>(null)
-  const [state, setState] = useState<'connecting' | 'connected' | 'error'>('connecting')
 
-  useEffect(() => {
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    })
-    pcRef.current = pc
-
-    pc.ontrack = (event) => {
-      if (videoRef.current) {
-        videoRef.current.srcObject = event.streams[0]
-        setState('connected')
-      }
-    }
-
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-        setState('error')
-      }
-    }
-
-    pc.addTransceiver('video', { direction: 'sendrecv' })
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate !== null) return  // noch nicht alle gesammelt
-      // Alle ICE-Kandidaten gesammelt → Offer per POST senden
-      const offerPayload = btoa(JSON.stringify({
-        type: 'offer',
-        sdp: pc.localDescription!.sdp,
-      }))
-      api.post(signalingUrl, offerPayload, {
-        headers: { 'Content-Type': 'plain/text' },
-        transformRequest: [(d: string) => d],
-      })
-        .then((r) => {
-          const answer = JSON.parse(atob(typeof r.data === 'string' ? r.data : JSON.stringify(r.data)))
-          if (answer.type === 'answer') {
-            return pc.setRemoteDescription(new RTCSessionDescription(answer))
-          }
-        })
-        .catch(() => setState('error'))
-    }
-
-    pc.createOffer()
-      .then((offer) => pc.setLocalDescription(offer))
-      .catch(() => setState('error'))
-
-    return () => {
-      pc.close()
-      pcRef.current = null
-    }
-  }, [signalingUrl])
-
-  if (state === 'error') {
-    return (
-      <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
-        <p className="text-sm text-gray-400">Webcam nicht verfügbar</p>
-      </div>
-    )
-  }
-
+// ── Webcam Komponente (MJPEG) ─────────────────────────────────────────────────
+function WebcamView({ src, name }: { src: string; name: string }) {
+  const [error, setError] = useState(false)
+  if (error) return (
+    <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
+      <p className="text-sm text-gray-400">Webcam nicht verfügbar</p>
+    </div>
+  )
   return (
-    <div className="bg-black aspect-video w-full overflow-hidden relative">
-      {state === 'connecting' && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-xs text-gray-400">Verbinde Webcam...</p>
-        </div>
-      )}
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
+    <div className="bg-black aspect-video w-full overflow-hidden">
+      <img
+        src={src}
+        alt={`${name} Webcam`}
         className="w-full h-full object-contain"
+        onError={() => setError(true)}
       />
     </div>
   )
@@ -344,9 +282,9 @@ export default function PrinterDetail() {
           </div>
         </div>
 
-        {/* Webcam – WebRTC */}
+        {/* Webcam – MJPEG via go2rtc */}
         {p.webcam_path && p.online && p.state !== 'pending_setup' && (
-          <WebRtcStream signalingUrl={p.webcam_path} />
+          <WebcamView src={p.webcam_path} name={p.name} />
         )}
         {!p.webcam_path && p.online && p.state !== 'pending_setup' && (
           <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
