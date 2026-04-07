@@ -61,6 +61,11 @@ const formatTime = (s: number) => {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
+const formatCountdownHM = (s: number) => {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 function useCountdown(isoDate: string | null): number {
   const [secs, setSecs] = useState(0)
   useEffect(() => {
@@ -73,6 +78,104 @@ function useCountdown(isoDate: string | null): number {
   return secs
 }
 
+function useEtaCountdown(unixTs: number | null): number {
+  const [secs, setSecs] = useState(() =>
+    unixTs ? Math.max(0, Math.floor(unixTs - Date.now() / 1000)) : 0
+  )
+  useEffect(() => {
+    if (!unixTs) { setSecs(0); return }
+    const calc = () => setSecs(Math.max(0, Math.floor(unixTs - Date.now() / 1000)))
+    calc()
+    const t = setInterval(calc, 1000)
+    return () => clearInterval(t)
+  }, [unixTs])
+  return secs
+}
+
+// ── WebRTC Webcam Komponente ───────────────────────────────────────────────────
+function WebRtcStream({ signalingUrl }: { signalingUrl: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const pcRef = useRef<RTCPeerConnection | null>(null)
+  const [state, setState] = useState<'connecting' | 'connected' | 'error'>('connecting')
+
+  useEffect(() => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    })
+    pcRef.current = pc
+
+    pc.ontrack = (event) => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = event.streams[0]
+        setState('connected')
+      }
+    }
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+        setState('error')
+      }
+    }
+
+    pc.addTransceiver('video', { direction: 'sendrecv' })
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate !== null) return  // noch nicht alle gesammelt
+      // Alle ICE-Kandidaten gesammelt → Offer per POST senden
+      const offerPayload = btoa(JSON.stringify({
+        type: 'offer',
+        sdp: pc.localDescription!.sdp,
+      }))
+      api.post(signalingUrl, offerPayload, {
+        headers: { 'Content-Type': 'plain/text' },
+        transformRequest: [(d: string) => d],
+      })
+        .then((r) => {
+          const answer = JSON.parse(atob(typeof r.data === 'string' ? r.data : JSON.stringify(r.data)))
+          if (answer.type === 'answer') {
+            return pc.setRemoteDescription(new RTCSessionDescription(answer))
+          }
+        })
+        .catch(() => setState('error'))
+    }
+
+    pc.createOffer()
+      .then((offer) => pc.setLocalDescription(offer))
+      .catch(() => setState('error'))
+
+    return () => {
+      pc.close()
+      pcRef.current = null
+    }
+  }, [signalingUrl])
+
+  if (state === 'error') {
+    return (
+      <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
+        <p className="text-sm text-gray-400">Webcam nicht verfügbar</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-black aspect-video w-full overflow-hidden relative">
+      {state === 'connecting' && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-xs text-gray-400">Verbinde Webcam...</p>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="w-full h-full object-contain"
+      />
+    </div>
+  )
+}
+
+// ── Hauptseite ─────────────────────────────────────────────────────────────────
 export default function PrinterDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -84,7 +187,6 @@ export default function PrinterDetail() {
   const [notFound, setNotFound] = useState(false)
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
-  const [webcamError, setWebcamError] = useState(false)
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -100,11 +202,12 @@ export default function PrinterDetail() {
 
   useEffect(() => {
     load()
-    intervalRef.current = setInterval(load, 10_000)
+    intervalRef.current = setInterval(load, 3_000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [load])
 
   const pickupSecs = useCountdown(printer?.occupation?.pickup_deadline ?? null)
+  const etaSecs = useEtaCountdown(printer?.estimated_end_time ?? null)
 
   const doAction = async (fn: () => Promise<void>) => {
     setActionError('')
@@ -144,7 +247,6 @@ export default function PrinterDetail() {
   const pct = Math.round(p.progress * 100)
   const showProgress = p.online && ['printing', 'paused'].includes(p.state)
 
-  // Sichtbarkeit
   const iAmOccupying = !!p.occupation?.is_mine
   const iAmAwaiting = iAmOccupying && p.occupation?.status === 'awaiting_pickup'
   const notified = p.my_queue?.status === 'notified'
@@ -153,24 +255,17 @@ export default function PrinterDetail() {
   const canClaimAfterNotified = notified && !p.occupation
   const canQueue = ((!!p.occupation && !p.occupation.is_mine) || p.external_print) && !p.my_queue
 
-  // ETA
-  let etaStr: string | null = null
-  let etaRemaining: string | null = null
+  // ETA Anzeige
+  let etaTimeStr: string | null = null
   if (p.estimated_end_time) {
     const eta = new Date(p.estimated_end_time * 1000)
-    etaStr = eta.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-    const remainSecs = Math.max(0, Math.floor(p.estimated_end_time - Date.now() / 1000))
-    if (remainSecs > 0) etaRemaining = formatTime(remainSecs)
-  } else if (p.remaining_seconds != null && p.remaining_seconds > 0) {
-    etaRemaining = formatTime(p.remaining_seconds)
+    etaTimeStr = eta.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
   }
 
-  // Filament in Metern
   const filamentM = p.filament_used_mm > 0 ? (p.filament_used_mm / 1000).toFixed(2) : null
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Zurück-Link */}
       <button
         onClick={() => navigate('/drucker')}
         className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4"
@@ -225,9 +320,7 @@ export default function PrinterDetail() {
                 <p className="text-sm font-semibold text-yellow-800">Druck fertig – bitte abholen!</p>
               </div>
               {pickupSecs > 0 && (
-                <span className="text-sm font-mono text-yellow-700">
-                  {Math.floor(pickupSecs / 3600)}h {Math.floor((pickupSecs % 3600) / 60)}m
-                </span>
+                <span className="text-sm font-mono text-yellow-700">{formatCountdownHM(pickupSecs)}</span>
               )}
             </div>
             <button onClick={release} disabled={actionLoading}
@@ -251,22 +344,13 @@ export default function PrinterDetail() {
           </div>
         </div>
 
-        {/* Webcam */}
-        {p.webcam_path && p.online && !webcamError && (
-          <div className="bg-black aspect-video w-full overflow-hidden">
-            <img
-              src={p.webcam_path}
-              alt={`${p.name} Webcam`}
-              className="w-full h-full object-contain"
-              onError={() => setWebcamError(true)}
-            />
-          </div>
+        {/* Webcam – WebRTC */}
+        {p.webcam_path && p.online && p.state !== 'pending_setup' && (
+          <WebRtcStream signalingUrl={p.webcam_path} />
         )}
-        {((!p.webcam_path && p.online && p.state !== 'pending_setup') || webcamError) && (
+        {!p.webcam_path && p.online && p.state !== 'pending_setup' && (
           <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
-            <p className="text-sm text-gray-400">
-              {webcamError ? 'Webcam nicht verfügbar' : 'Kein Webcam konfiguriert'}
-            </p>
+            <p className="text-sm text-gray-400">Kein Webcam konfiguriert</p>
           </div>
         )}
 
@@ -275,7 +359,6 @@ export default function PrinterDetail() {
           {/* Fortschritt + ETA */}
           {showProgress && (
             <div>
-              {/* Wer druckt */}
               {p.occupation && !p.occupation.is_mine && (
                 <p className="text-sm text-gray-600 mb-2">
                   Druckt für: <span className="font-medium text-gray-900">
@@ -287,57 +370,46 @@ export default function PrinterDetail() {
                 <p className="text-sm text-gray-600 mb-2">Außerhalb Portal gestartet</p>
               )}
 
-              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                <span className="font-medium text-gray-800">{pct}%</span>
-                {etaStr && (
-                  <span>
-                    Fertig um <span className="font-medium text-gray-800">{etaStr}</span>
-                    {etaRemaining && <span className="text-gray-400"> (noch {etaRemaining})</span>}
-                  </span>
-                )}
-                {!etaStr && etaRemaining && <span>noch {etaRemaining}</span>}
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
+                <span className="text-base font-semibold text-gray-900">{pct}%</span>
+                <div className="text-right">
+                  {etaTimeStr && (
+                    <span className="font-medium text-gray-800">Fertig um {etaTimeStr}</span>
+                  )}
+                  {etaSecs > 0 && (
+                    <span className="text-gray-400 ml-1">(noch {formatCountdownHM(etaSecs)})</span>
+                  )}
+                </div>
               </div>
-              <div className="w-full bg-gray-100 rounded-full h-2.5">
-                <div className="bg-blue-500 h-2.5 rounded-full transition-all duration-1000" style={{ width: `${pct}%` }} />
+              <div className="w-full bg-gray-100 rounded-full h-3">
+                <div className="bg-blue-500 h-3 rounded-full transition-all duration-1000" style={{ width: `${pct}%` }} />
               </div>
             </div>
           )}
 
-          {/* Admin-Controls */}
+          {/* Admin/Owner-Controls */}
           {(isAdmin || iAmOccupying) && showProgress && (
             <div className="flex gap-2 flex-wrap">
               {p.state === 'printing' && (
-                <button
-                  onClick={() => control('pause')}
-                  disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50 rounded-lg disabled:opacity-50"
-                >
+                <button onClick={() => control('pause')} disabled={actionLoading}
+                  className="px-4 py-2 text-sm font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50 rounded-lg disabled:opacity-50">
                   Pausieren
                 </button>
               )}
               {p.state === 'paused' && (
-                <button
-                  onClick={() => control('resume')}
-                  disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-medium border border-green-300 text-green-700 hover:bg-green-50 rounded-lg disabled:opacity-50"
-                >
+                <button onClick={() => control('resume')} disabled={actionLoading}
+                  className="px-4 py-2 text-sm font-medium border border-green-300 text-green-700 hover:bg-green-50 rounded-lg disabled:opacity-50">
                   Fortsetzen
                 </button>
               )}
               {isAdmin && (
                 <>
-                  <button
-                    onClick={() => setConfirmAction('cancel')}
-                    disabled={actionLoading}
-                    className="px-4 py-2 text-sm font-medium border border-red-300 text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-50"
-                  >
+                  <button onClick={() => setConfirmAction('cancel')} disabled={actionLoading}
+                    className="px-4 py-2 text-sm font-medium border border-red-300 text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-50">
                     Abbrechen
                   </button>
-                  <button
-                    onClick={() => setConfirmAction('emergency_stop')}
-                    disabled={actionLoading}
-                    className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50"
-                  >
+                  <button onClick={() => setConfirmAction('emergency_stop')} disabled={actionLoading}
+                    className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50">
                     🛑 Notfall-Stopp
                   </button>
                 </>
@@ -349,9 +421,9 @@ export default function PrinterDetail() {
           {canSeeDetails && (showProgress || p.state === 'complete') && (
             <div className="rounded-lg bg-gray-50 border border-gray-200 divide-y divide-gray-100">
               {p.filename && (
-                <div className="px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Datei</span>
-                  <span className="text-xs font-medium text-gray-800 max-w-xs truncate text-right">{p.filename}</span>
+                <div className="px-4 py-2.5 flex items-center justify-between gap-4">
+                  <span className="text-xs text-gray-500 shrink-0">Datei</span>
+                  <span className="text-xs font-medium text-gray-800 truncate text-right">{p.filename}</span>
                 </div>
               )}
               {p.layer != null && p.layer_count != null && (
@@ -408,6 +480,8 @@ export default function PrinterDetail() {
             </div>
           )}
 
+          {p.state === 'offline' && <p className="text-sm text-gray-400">Drucker nicht erreichbar.</p>}
+
           {/* Warteschlange */}
           {p.queue_count > 0 && (
             <p className="text-xs text-gray-500">
@@ -428,7 +502,6 @@ export default function PrinterDetail() {
             </div>
           )}
 
-          {/* Fehler */}
           {actionError && <p className="text-xs text-red-600">{actionError}</p>}
 
           {/* Aktions-Buttons */}
@@ -456,7 +529,7 @@ export default function PrinterDetail() {
         </div>
       </div>
 
-      {/* Bestätigungs-Modal für gefährliche Aktionen */}
+      {/* Bestätigungs-Modal */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl">
@@ -465,12 +538,12 @@ export default function PrinterDetail() {
             </h3>
             <p className="text-sm text-gray-500 mb-4">
               {confirmAction === 'emergency_stop'
-                ? 'Der Drucker wird sofort gestoppt. Alle Bewegungen werden abgebrochen. Nicht rückgängig zu machen.'
+                ? 'Der Drucker wird sofort gestoppt. Alle Bewegungen werden abgebrochen.'
                 : 'Der aktuelle Druck wird abgebrochen. Das Modell muss neu gestartet werden.'}
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => { setConfirmAction(null); control(confirmAction) }}
+                onClick={() => { const a = confirmAction; setConfirmAction(null); control(a) }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg"
               >
                 Ja, ausführen

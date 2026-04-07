@@ -80,6 +80,21 @@ function useCountdown(isoDate: string | null): number {
   return secs
 }
 
+// Live-Countdown aus Unix-Timestamp (für ETA)
+function useEtaCountdown(unixTs: number | null): number {
+  const [secs, setSecs] = useState(() =>
+    unixTs ? Math.max(0, Math.floor(unixTs - Date.now() / 1000)) : 0
+  )
+  useEffect(() => {
+    if (!unixTs) { setSecs(0); return }
+    const calc = () => setSecs(Math.max(0, Math.floor(unixTs - Date.now() / 1000)))
+    calc()
+    const t = setInterval(calc, 1000)
+    return () => clearInterval(t)
+  }, [unixTs])
+  return secs
+}
+
 // ── PrinterCard ────────────────────────────────────────────────────────────────
 function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void }) {
   const navigate = useNavigate()
@@ -92,6 +107,7 @@ function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void
   const [loading, setLoading] = useState(false)
 
   const pickupSecs = useCountdown(p.occupation?.pickup_deadline ?? null)
+  const etaSecs = useEtaCountdown(p.estimated_end_time ?? null)
 
   const notified = p.my_queue?.status === 'notified'
   const iAmOccupying = !!p.occupation?.is_mine
@@ -244,9 +260,7 @@ function PrinterCard({ p, onRefresh }: { p: PrinterStatus; onRefresh: () => void
               <span>{pct}%</span>
               <span>
                 {p.elapsed_seconds > 0 && <>{formatTime(p.elapsed_seconds)} vergangen</>}
-                {p.remaining_seconds != null && p.remaining_seconds > 0 && (
-                  <> · {formatTime(p.remaining_seconds)} verbleibend</>
-                )}
+                {etaSecs > 0 && <> · {formatTime(etaSecs)} verbleibend</>}
               </span>
             </div>
             <div className="w-full bg-gray-100 rounded-full h-2">
@@ -349,7 +363,7 @@ export default function Printers() {
 
   useEffect(() => {
     load()
-    intervalRef.current = setInterval(load, 10_000)
+    intervalRef.current = setInterval(load, 3_000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [load])
 
