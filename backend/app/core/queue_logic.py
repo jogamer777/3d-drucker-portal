@@ -11,6 +11,7 @@ from app.models.models import (
 )
 from app.core.printer_client import _cache as printer_cache, CACHE_TTL, PRINTERS, get_printer_status
 from app.core.email import send_email
+from app.core.portal_config import get_portal_url
 
 QUEUE_NOTIFY_TIMEOUT_MINUTES = 5
 PICKUP_WINDOW_HOURS = 24
@@ -61,6 +62,7 @@ def advance_queue(db: Session, printer_id: str):
         QueueEntry.status == QueueStatus.notified,
         QueueEntry.notified_at < timeout_threshold,
     ).update({"status": QueueStatus.skipped})
+    db.commit()  # Muss vor dem Early-Return committed werden
 
     # Prüfen ob bereits jemand im 5-Min-Fenster ist
     still_notified = db.query(QueueEntry).filter(
@@ -99,7 +101,7 @@ def advance_queue(db: Session, printer_id: str):
                     f"Hallo,\n\n"
                     f"du bist jetzt an der Reihe! Drucker {printer_id} ist frei.\n"
                     f"Du hast {QUEUE_NOTIFY_TIMEOUT_MINUTES} Minuten, um den Drucker zu beanspruchen.\n\n"
-                    f"→ Jetzt zum Portal: https://172.17.129.228/drucker/{printer_id}\n\n"
+                    f"→ Jetzt zum Portal: {get_portal_url()}/drucker/{printer_id}\n\n"
                     f"– Das 3D-Drucker-Portal"
                 ),
             )
@@ -167,7 +169,7 @@ def expire_and_advance(db: Session):
                                 f"Hallo,\n\n"
                                 f"dein Druck auf {printer_name} ist fertig!\n"
                                 f"Bitte hole ihn innerhalb von {PICKUP_WINDOW_HOURS} Stunden ab.\n\n"
-                                f"→ Zum Portal: https://172.17.129.228/drucker/{occ.printer_id}\n\n"
+                                f"→ Zum Portal: {get_portal_url()}/drucker/{occ.printer_id}\n\n"
                                 f"– Das 3D-Drucker-Portal"
                             ),
                         )

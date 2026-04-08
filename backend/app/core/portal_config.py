@@ -34,3 +34,13 @@ def set_registration_open(value: bool) -> None:
     cfg = _load()
     cfg.setdefault("registration", {})["open"] = value
     _save(cfg)
+
+
+def get_portal_url() -> str:
+    return _load().get("portal_url", "https://localhost")
+
+
+def set_portal_url(url: str) -> None:
+    cfg = _load()
+    cfg["portal_url"] = url
+    _save(cfg)

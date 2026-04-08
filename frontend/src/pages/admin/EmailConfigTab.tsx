@@ -94,9 +94,13 @@ export default function EmailConfigTab() {
           </label>
         </div>
 
+        <div className="mb-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
+          <span className="font-medium">Eigener Postfix-Server:</span> Host = <code className="font-mono">localhost</code>, Port = <code className="font-mono">25</code>, kein Benutzername, STARTTLS und SSL deaktivieren.
+        </div>
+
         <div className="space-y-3">
-          {field('smtp_host', 'SMTP-Server', 'text', 'mail.example.com')}
-          {field('smtp_port', 'SMTP-Port', 'number', '587')}
+          {field('smtp_host', 'SMTP-Server', 'text', 'localhost')}
+          {field('smtp_port', 'SMTP-Port', 'number', '25')}
           {field('smtp_user', 'Benutzername', 'text', 'portal@example.com')}
           {field('smtp_password', 'Passwort (leer = unverändert)', 'password')}
           {field('from_address', 'Absenderadresse', 'email', 'portal@example.com')}

@@ -16,7 +16,7 @@ from app.core.security import hash_password
 from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus, MaintenanceLog, MAINTENANCE_ACTIONS
 from app.core.printer_client import PRINTERS, reload_printer_config, save_printer_config
 from app.core.email import get_email_config, save_email_config, send_email, reload_email_config
-from app.core.portal_config import get_registration_open, set_registration_open
+from app.core.portal_config import get_registration_open, set_registration_open, get_portal_url, set_portal_url
 from app.schemas.schemas import MaintenanceLogCreate, MaintenanceLogOut
 from app.schemas.schemas import (
     AdminUserOut, AdminUserUpdate, PasswordResetResponse,
@@ -390,17 +390,27 @@ def test_email_config(admin: User = Depends(require_admin)):
 
 @router.get("/portal-config")
 def get_portal_config_endpoint(admin: User = Depends(require_admin)):
-    return {"registration_open": get_registration_open()}
+    return {
+        "registration_open": get_registration_open(),
+        "portal_url": get_portal_url(),
+    }
 
 
 class PortalConfigUpdate(BaseModel):
     registration_open: bool
+    portal_url: str = ""
 
 
 @router.put("/portal-config")
 def update_portal_config(body: PortalConfigUpdate, admin: User = Depends(require_admin)):
     set_registration_open(body.registration_open)
-    return {"ok": True, "registration_open": body.registration_open}
+    if body.portal_url:
+        set_portal_url(body.portal_url.rstrip("/"))
+    return {
+        "ok": True,
+        "registration_open": body.registration_open,
+        "portal_url": get_portal_url(),
+    }
 
 
 # ── Wartungsprotokoll ─────────────────────────────────────────────────────────
