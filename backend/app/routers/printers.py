@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import os
 import urllib.request
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -224,6 +225,10 @@ def start_print(
     ).first()
     if not gfile:
         raise HTTPException(404, "Datei nicht gefunden")
+    _upload_root = "/home/fj/3d-drucker-portal/uploads"
+    safe_filepath = os.path.abspath(gfile.filepath)
+    if not safe_filepath.startswith(os.path.abspath(_upload_root) + os.sep):
+        raise HTTPException(403, "Zugriff verweigert")
 
     # 3. Kosten berechnen
     filament_grams = _parse_filament_grams(gfile.filament_usage)
@@ -237,7 +242,7 @@ def start_print(
         )
 
     # 5. Druck starten
-    ok = upload_and_start_print(printer_id, gfile.filepath, gfile.filename)
+    ok = upload_and_start_print(printer_id, safe_filepath, gfile.filename)
     if not ok:
         raise HTTPException(500, "Druck konnte nicht gestartet werden – Drucker erreichbar?")
 

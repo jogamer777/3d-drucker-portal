@@ -92,6 +92,7 @@ def redeem_voucher(
         _redeem_attempts[uid].append(now)
         raise HTTPException(400, "Dieser Code ist ungültig")
     if voucher.status == VoucherStatus.redeemed:
+        _redeem_attempts[uid].append(now)
         raise HTTPException(400, "Dieser Code wurde bereits eingelöst")
 
     # Gutschein einlösen

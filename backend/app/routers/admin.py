@@ -110,10 +110,8 @@ def delete_user(
 
     # redeemed_by_id ist nullable → nullen bevor User gelöscht wird
     db.query(VoucherCode).filter(VoucherCode.redeemed_by_id == user_id).update({"redeemed_by_id": None})
-    db.commit()
-
     db.delete(user)  # Transactions + Messages cascadieren via SQLAlchemy
-    db.commit()
+    db.commit()  # Einziger Commit für beide Operationen atomar
     return {"ok": True}
 
 
@@ -215,10 +213,14 @@ def admin_download_file(
     gfile = db.query(GCodeFile).filter(GCodeFile.id == file_id).first()
     if not gfile:
         raise HTTPException(404, "Datei nicht gefunden")
-    if not os.path.exists(gfile.filepath):
+    _upload_root = os.path.abspath("/home/fj/3d-drucker-portal/uploads")
+    safe_path = os.path.abspath(gfile.filepath)
+    if not safe_path.startswith(_upload_root + os.sep):
+        raise HTTPException(403, "Zugriff verweigert")
+    if not os.path.exists(safe_path):
         raise HTTPException(404, "Datei nicht auf Disk vorhanden")
     return FileResponse(
-        path=gfile.filepath,
+        path=safe_path,
         filename=gfile.filename,
         media_type="application/octet-stream",
     )

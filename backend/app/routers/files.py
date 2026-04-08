@@ -148,11 +148,14 @@ def download_file(
     ).first()
     if not gfile:
         raise HTTPException(404, "Datei nicht gefunden")
-    if not os.path.exists(gfile.filepath):
+    safe_path = os.path.abspath(gfile.filepath)
+    if not safe_path.startswith(os.path.abspath(UPLOAD_ROOT) + os.sep):
+        raise HTTPException(403, "Zugriff verweigert")
+    if not os.path.exists(safe_path):
         raise HTTPException(404, "Datei nicht auf Disk vorhanden")
 
     return FileResponse(
-        path=gfile.filepath,
+        path=safe_path,
         filename=gfile.filename,
         media_type="application/octet-stream",
     )
