@@ -235,7 +235,7 @@ function SlotCard({ s }: { s: SlotInfo }) {
 export default function PrinterDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user, setAuth, accessToken } = useAuthStore()
+  const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin' || user?.role === 'power_user'
 
   const [printer, setPrinter] = useState<PrinterStatus | null>(null)
@@ -338,7 +338,7 @@ export default function PrinterDetail() {
       </div>
 
       {/* 2-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 14, alignItems: 'start' }}
+      <div style={{ display: 'grid', gap: 14, alignItems: 'start' }}
            className="grid-cols-1 md:grid-cols-[1fr_360px]">
 
         {/* LEFT: Webcam + progress + details */}
