@@ -10,6 +10,7 @@ interface GCodeFile {
   filament_usage: Record<string, number> | null
   thumbnail_b64: string | null
   profile_signature: string | null
+  is_favorite: boolean
   uploaded_at: string
 }
 
@@ -50,13 +51,14 @@ export default function Files() {
   const [error, setError] = useState('')
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [favoritesOnly, setFavoritesOnly] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const load = async () => {
+  const load = async (favOnly = favoritesOnly) => {
     setLoading(true)
     try {
       const [fRes, sRes] = await Promise.all([
-        api.get('/files'),
+        api.get(`/files${favOnly ? '?favorites_only=true' : ''}`),
         api.get('/files/storage'),
       ])
       setFiles(fRes.data)
@@ -66,7 +68,17 @@ export default function Files() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  const toggleFavorite = async (f: GCodeFile) => {
+    const newVal = !f.is_favorite
+    setFiles(prev => prev.map(x => x.id === f.id ? { ...x, is_favorite: newVal } : x))
+    try {
+      await api.patch(`/files/${f.id}/favorite`, { is_favorite: newVal })
+    } catch {
+      setFiles(prev => prev.map(x => x.id === f.id ? { ...x, is_favorite: f.is_favorite } : x))
+    }
+  }
+
+  useEffect(() => { load() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const uploadFile = async (file: File) => {
     setError('')
@@ -134,13 +146,29 @@ export default function Files() {
           <h1 className="text-2xl font-semibold text-gray-900">Meine Dateien</h1>
           <p className="text-sm text-gray-500 mt-0.5">G-Code hochladen und verwalten</p>
         </div>
-        <button
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-        >
-          <span>↑</span> Datei hochladen
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const next = !favoritesOnly
+              setFavoritesOnly(next)
+              load(next)
+            }}
+            className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+              favoritesOnly
+                ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {favoritesOnly ? '★ Favoriten' : '☆ Favoriten'}
+          </button>
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+          >
+            <span>↑</span> Datei hochladen
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -267,6 +295,17 @@ export default function Files() {
 
                 {/* Aktionen */}
                 <div className="flex flex-col gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => toggleFavorite(f)}
+                    className={`text-xs px-3 py-1.5 rounded border text-center transition-colors ${
+                      f.is_favorite
+                        ? 'bg-yellow-50 border-yellow-300 text-yellow-600'
+                        : 'border-gray-200 text-gray-400 hover:bg-yellow-50 hover:border-yellow-200 hover:text-yellow-500'
+                    }`}
+                    title={f.is_favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+                  >
+                    {f.is_favorite ? '★' : '☆'}
+                  </button>
                   <a
                     href={`/api/files/${f.id}/download`}
                     download={f.filename}

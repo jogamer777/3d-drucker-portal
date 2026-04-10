@@ -10,8 +10,9 @@ import TopupRequestsTab from './TopupRequestsTab'
 import EmailConfigTab from './EmailConfigTab'
 import PortalSettingsTab from './PortalSettingsTab'
 import FilamentTab from './FilamentTab'
+import SlicerProfilesTab from './SlicerProfilesTab'
 
-type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'filament' | 'email' | 'settings'
+type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'filament' | 'profiles' | 'email' | 'settings'
 
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('stats')
@@ -32,6 +33,7 @@ export default function AdminPanel() {
           ['files', 'Dateien'],
           ['printers', 'Drucker'],
           ['filament', 'Filament'],
+          ['profiles', 'Slicer-Profile'],
           ['email', 'E-Mail'],
           ['settings', 'Einstellungen'],
         ] as [Tab, string][]).map(([key, label]) => (
@@ -59,6 +61,7 @@ export default function AdminPanel() {
         {tab === 'files' && <FilesTab />}
         {tab === 'printers' && <PrintersTab />}
         {tab === 'filament' && <FilamentTab />}
+        {tab === 'profiles' && <SlicerProfilesTab />}
         {tab === 'email' && <EmailConfigTab />}
         {tab === 'settings' && <PortalSettingsTab />}
       </div>

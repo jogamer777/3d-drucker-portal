@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base, SessionLocal
-from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations, topup, filament
+from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations, topup, filament, profiles
 
 # Datenbank-Tabellen erstellen (neue Tabellen werden automatisch angelegt)
 Base.metadata.create_all(bind=engine)
@@ -37,6 +37,7 @@ app.include_router(printers.router)
 app.include_router(reservations.router)
 app.include_router(topup.router)
 app.include_router(filament.router)
+app.include_router(profiles.router)
 
 
 async def _reservation_cleanup_loop():
@@ -66,6 +67,10 @@ def _run_migrations():
         "ALTER TABLE printer_occupations ADD COLUMN actual_filament_g REAL",
         "ALTER TABLE printer_occupations ADD COLUMN slot_id INTEGER",
         # Neue Tabellen werden via Base.metadata.create_all angelegt (oben in startup)
+        # Favoriten-Flag für Dateien
+        "ALTER TABLE gcode_files ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0",
+        # Slicer-Profile Tabelle
+        "CREATE TABLE IF NOT EXISTS slicer_profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT, printer_id TEXT, slicer_type TEXT NOT NULL, filename_orig TEXT NOT NULL, filepath TEXT NOT NULL, size_bytes INTEGER NOT NULL, uploaded_by_id INTEGER, created_at TEXT)",
     ]
     for sql in migrations:
         try:

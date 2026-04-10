@@ -234,7 +234,26 @@ class GCodeFileOut(BaseModel):
     filament_usage: Optional[dict]
     thumbnail_b64: Optional[str]
     profile_signature: Optional[str]
+    is_favorite: bool = False
     uploaded_at: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class FavoriteToggle(BaseModel):
+    is_favorite: bool
+
+
+class SlicerProfileOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    printer_id: Optional[str]
+    slicer_type: str
+    filename_orig: str
+    size_bytes: int
+    created_at: datetime
 
     class Config:
         orm_mode = True

@@ -131,6 +131,7 @@ class GCodeFile(Base):
     filament_usage = Column(String, nullable=True)   # JSON-String
     thumbnail_b64 = Column(Text, nullable=True)      # data:image/png;base64,...
     profile_signature = Column(String, nullable=True)
+    is_favorite = Column(Boolean, default=False, nullable=False, server_default='0')
     uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="files")
@@ -279,3 +280,22 @@ class PrinterSlot(Base):
     __table_args__ = (UniqueConstraint("printer_id", "slot_index", name="uq_printer_slot"),)
 
     filament_type = relationship("FilamentType", back_populates="slots")
+
+
+# ── Slicer-Profile ─────────────────────────────────────────────────────────────
+
+class SlicerProfile(Base):
+    __tablename__ = "slicer_profiles"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    name            = Column(String, nullable=False)        # z.B. "PLA Standard K2"
+    description     = Column(String, nullable=True)
+    printer_id      = Column(String, nullable=True)         # "k2", "crx" oder None = alle
+    slicer_type     = Column(String, nullable=False)        # "orca", "prusa", "cura", "other"
+    filename_orig   = Column(String, nullable=False)        # Original-Dateiname
+    filepath        = Column(String, nullable=False)        # Absoluter Pfad auf Disk
+    size_bytes      = Column(Integer, nullable=False)
+    uploaded_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    uploaded_by = relationship("User", foreign_keys=[uploaded_by_id])

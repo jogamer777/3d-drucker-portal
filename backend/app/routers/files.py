@@ -2,14 +2,14 @@ import os
 import json
 import uuid
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.gcode_parser import parse_gcode
 from app.models.models import GCodeFile, ActivityLog, User
-from app.schemas.schemas import GCodeFileOut, StorageInfo
+from app.schemas.schemas import GCodeFileOut, StorageInfo, FavoriteToggle
 from app.routers.user import get_current_user
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -27,15 +27,14 @@ def _user_upload_dir(user_id: int) -> str:
 
 @router.get("", response_model=List[GCodeFileOut])
 def list_files(
+    favorites_only: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    files = (
-        db.query(GCodeFile)
-        .filter(GCodeFile.user_id == current_user.id)
-        .order_by(GCodeFile.uploaded_at.desc())
-        .all()
-    )
+    q = db.query(GCodeFile).filter(GCodeFile.user_id == current_user.id)
+    if favorites_only:
+        q = q.filter(GCodeFile.is_favorite == True)
+    files = q.order_by(GCodeFile.uploaded_at.desc()).all()
     result = []
     for f in files:
         out = GCodeFileOut(
@@ -46,10 +45,30 @@ def list_files(
             filament_usage=json.loads(f.filament_usage) if f.filament_usage else None,
             thumbnail_b64=f.thumbnail_b64,
             profile_signature=f.profile_signature,
+            is_favorite=bool(f.is_favorite),
             uploaded_at=f.uploaded_at,
         )
         result.append(out)
     return result
+
+
+@router.patch("/{file_id}/favorite")
+def toggle_favorite(
+    file_id: int,
+    body: FavoriteToggle,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    is_admin = current_user.role.value in ("admin", "power_user")
+    q = db.query(GCodeFile).filter(GCodeFile.id == file_id)
+    if not is_admin:
+        q = q.filter(GCodeFile.user_id == current_user.id)
+    gfile = q.first()
+    if not gfile:
+        raise HTTPException(404, "Datei nicht gefunden")
+    gfile.is_favorite = body.is_favorite
+    db.commit()
+    return {"ok": True, "is_favorite": body.is_favorite}
 
 
 @router.get("/storage", response_model=StorageInfo)
@@ -132,6 +151,7 @@ async def upload_file(
         filament_usage=json.loads(gfile.filament_usage) if gfile.filament_usage else None,
         thumbnail_b64=gfile.thumbnail_b64,
         profile_signature=gfile.profile_signature,
+        is_favorite=False,
         uploaded_at=gfile.uploaded_at,
     )
 

@@ -59,6 +59,30 @@ interface PrinterStatus {
   external_print: boolean
 }
 
+interface SlotInfo {
+  slot_index: number
+  printer_id: string
+  filament_name: string | null
+  material: string | null
+  color_hex: string | null
+  remaining_weight_g: number | null
+  initial_weight_g: number | null
+  low_spool: boolean
+}
+
+interface SlicerProfileInfo {
+  id: number
+  name: string
+  description: string | null
+  printer_id: string | null
+  slicer_type: string
+  filename_orig: string
+}
+
+const SLICER_LABELS: Record<string, string> = {
+  orca: 'OrcaSlicer', prusa: 'PrusaSlicer', cura: 'Cura', bambu: 'Bambu Studio', other: 'Sonstiger',
+}
+
 const STATE_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
   idle:          { label: 'Bereit',            dot: 'bg-green-500',  text: 'text-green-700' },
   printing:      { label: 'Druckt',            dot: 'bg-blue-500',   text: 'text-blue-700' },
@@ -143,6 +167,7 @@ function StartPrintModal({
   userBalanceCents,
   onClose,
   onStarted,
+  isAdmin,
 }: {
   printerId: string
   userBalanceCents: number
@@ -383,6 +408,8 @@ export default function PrinterDetail() {
   const [refundCents, setRefundCents] = useState<number | null>(null)
   const [showStartModal, setShowStartModal] = useState(false)
   const [lastMaintenance, setLastMaintenance] = useState<{ action: string; notes: string | null; created_at: string } | null>(null)
+  const [slots, setSlots] = useState<SlotInfo[]>([])
+  const [slicerProfiles, setSlicerProfiles] = useState<SlicerProfileInfo[]>([])
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const load = useCallback(async () => {
@@ -400,6 +427,14 @@ export default function PrinterDetail() {
     intervalRef.current = setInterval(load, 3_000)
     // Letzte Wartung einmalig laden
     api.get(`/printers/${id}/maintenance/last`).then(r => setLastMaintenance(r.data)).catch(() => {})
+    // Filament-Slots laden
+    api.get('/filament/slots').then(r => {
+      setSlots((r.data as SlotInfo[]).filter(s => s.printer_id === id))
+    }).catch(() => {})
+    // Slicer-Profile laden
+    api.get('/slicer-profiles').then(r => {
+      setSlicerProfiles((r.data as SlicerProfileInfo[]).filter(p => !p.printer_id || p.printer_id === id))
+    }).catch(() => {})
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [load])
 
@@ -741,6 +776,79 @@ export default function PrinterDetail() {
 
         </div>
       </div>
+
+      {/* Filament-Slots */}
+      {slots.filter(s => s.filament_name).length > 0 && (
+        <div className="mt-4 bg-white border border-gray-200 rounded-xl p-4">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Filament</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {slots.map(s => {
+              const pct = s.remaining_weight_g != null && s.initial_weight_g
+                ? Math.max(0, Math.min(100, (s.remaining_weight_g / s.initial_weight_g) * 100))
+                : null
+              const barColor = pct == null ? 'bg-gray-200' : pct > 25 ? 'bg-green-500' : pct > 10 ? 'bg-yellow-400' : 'bg-red-500'
+              return (
+                <div key={s.slot_index} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                  {s.color_hex ? (
+                    <div className="w-5 h-5 rounded flex-shrink-0 border border-gray-200" style={{ backgroundColor: s.color_hex }} />
+                  ) : (
+                    <div className="w-5 h-5 rounded flex-shrink-0 bg-gray-200" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-medium text-gray-800 truncate">{s.filament_name}</p>
+                      {s.material && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 flex-shrink-0">{s.material}</span>
+                      )}
+                      {s.low_spool && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600 flex-shrink-0">Wenig</span>
+                      )}
+                    </div>
+                    {pct != null && (
+                      <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
+                        <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    )}
+                    {s.remaining_weight_g != null && (
+                      <p className="text-xs text-gray-400 mt-0.5">{s.remaining_weight_g} g verbleibend</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-300 flex-shrink-0">#{s.slot_index + 1}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Slicer-Profile */}
+      {slicerProfiles.length > 0 && (
+        <div className="mt-4 bg-white border border-gray-200 rounded-xl p-4">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Slicer-Profile</p>
+          <div className="space-y-2">
+            {slicerProfiles.map(p => (
+              <div key={p.id} className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-medium text-gray-800 truncate">{p.name}</p>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 flex-shrink-0">
+                      {SLICER_LABELS[p.slicer_type] ?? p.slicer_type}
+                    </span>
+                  </div>
+                  {p.description && <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>}
+                </div>
+                <a
+                  href={`/api/slicer-profiles/${p.id}/download`}
+                  download={p.filename_orig}
+                  className="flex-shrink-0 text-xs px-3 py-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                >
+                  ↓ Download
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Letzte Wartung */}
       {lastMaintenance && (
