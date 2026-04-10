@@ -43,13 +43,13 @@ const StatCard = ({
 }: {
   icon: string; label: string; value: string; sub?: string; highlight?: boolean
 }) => (
-  <div className={`bg-white rounded-xl border p-5 ${highlight ? 'border-blue-200' : 'border-gray-200'}`}>
-    <div className="flex items-center gap-2 mb-2">
-      <span className="text-2xl">{icon}</span>
-      <span className="text-sm text-gray-500">{label}</span>
+  <div style={{ background: '#fff', borderRadius: 12, border: `0.5px solid ${highlight ? 'var(--lime)' : 'var(--border)'}`, padding: '16px 18px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <span style={{ fontSize: 20 }}>{icon}</span>
+      <span style={{ fontSize: 12, color: 'var(--text3)' }}>{label}</span>
     </div>
-    <p className={`text-2xl font-bold ${highlight ? 'text-blue-700' : 'text-gray-900'}`}>{value}</p>
-    {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+    <p style={{ fontSize: 22, fontWeight: 800, color: highlight ? 'var(--lime-dark)' : 'var(--text)', margin: 0 }}>{value}</p>
+    {sub && <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{sub}</p>}
   </div>
 )
 
@@ -83,22 +83,22 @@ function FinancialResetModal({ onClose, onDone }: { onClose: () => void; onDone:
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-md w-full shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-red-700">Finanzdaten zurücksetzen</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+      <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 440, width: '100%' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '14px 20px', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 800, color: 'var(--red)', margin: 0 }}>Finanzdaten zurücksetzen</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)', lineHeight: 1 }}>&times;</button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
-          {loading && <p className="text-sm text-gray-400 text-center py-4">Lade Vorschau...</p>}
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {loading && <p style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '16px 0' }}>Lade Vorschau...</p>}
 
-          {!loading && error && <p className="text-sm text-red-600">{error}</p>}
+          {!loading && error && <p style={{ fontSize: 13, color: 'var(--red)' }}>{error}</p>}
 
           {!loading && preview && !done && (
             <>
-              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800 space-y-1">
-                <p className="font-semibold">Folgendes wird zurückgesetzt:</p>
-                <ul className="list-disc list-inside text-xs space-y-0.5 mt-1">
+              <div style={{ background: 'var(--red-bg)', border: '0.5px solid var(--red)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--red)' }}>
+                <p style={{ fontWeight: 700, margin: '0 0 6px' }}>Folgendes wird zurückgesetzt:</p>
+                <ul style={{ paddingLeft: 16, margin: 0, lineHeight: 1.8 }}>
                   <li><strong>{preview.users_affected}</strong> Nutzer-Guthaben werden auf 0€ gesetzt</li>
                   <li><strong>{preview.transactions_deleted}</strong> Transaktionen werden gelöscht</li>
                   <li><strong>{preview.vouchers_reset}</strong> eingelöste Voucher werden zurückgesetzt</li>
@@ -107,19 +107,19 @@ function FinancialResetModal({ onClose, onDone }: { onClose: () => void; onDone:
               </div>
 
               {preview.active_occupations_untouched > 0 && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-xs text-yellow-800">
+                <div style={{ background: 'var(--amber-bg)', border: '0.5px solid var(--amber)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--amber)' }}>
                   <strong>{preview.active_occupations_untouched}</strong> laufende Druckvorgänge bleiben unberührt.
                 </div>
               )}
 
-              <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-xs text-gray-600">
+              <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: 'var(--text3)' }}>
                 Diese Aktion kann nicht rückgängig gemacht werden. Alle Guthaben und Finanzdaten werden dauerhaft gelöscht.
               </div>
 
               <button
                 onClick={execute}
                 disabled={executing}
-                className="w-full bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
+                style={{ width: '100%', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', fontSize: 13, fontWeight: 700, cursor: executing ? 'not-allowed' : 'pointer', opacity: executing ? 0.6 : 1, fontFamily: 'inherit' }}
               >
                 {executing ? 'Wird zurückgesetzt...' : 'Ja, alle Finanzdaten zurücksetzen'}
               </button>
@@ -127,9 +127,9 @@ function FinancialResetModal({ onClose, onDone }: { onClose: () => void; onDone:
           )}
 
           {done && (
-            <div className="text-center py-4">
-              <p className="text-green-700 font-semibold">Finanzdaten erfolgreich zurückgesetzt.</p>
-              <button onClick={onClose} className="mt-3 text-sm text-blue-600 hover:underline">Schließen</button>
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--emerald)' }}>Finanzdaten erfolgreich zurückgesetzt.</p>
+              <button onClick={onClose} style={{ marginTop: 12, fontSize: 13, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Schließen</button>
             </div>
           )}
         </div>
@@ -171,92 +171,60 @@ export default function StatsTab() {
   useEffect(() => { load() }, [])
   useEffect(() => { loadChart(chartPeriod) }, [chartPeriod])
 
-  if (loading) return <div className="text-sm text-gray-400 py-8 text-center">Lade Statistiken...</div>
-  if (!stats) return <div className="text-sm text-red-500 py-8 text-center">Fehler beim Laden.</div>
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>Lade Statistiken...</div>
+  if (!stats) return <div style={{ fontSize: 13, color: 'var(--red)', textAlign: 'center', padding: '32px 0' }}>Fehler beim Laden.</div>
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-semibold text-gray-800">Portal-Statistiken</h2>
-        <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>Portal-Statistiken</h2>
+        <button onClick={load} style={{ fontSize: 13, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Aktualisieren</button>
       </div>
 
       {/* Live-Status */}
       <div>
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Live-Status</p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <StatCard
-            icon="🖨️"
-            label="Aktive Belegungen"
-            value={String(stats.active_occupations)}
-            sub="Drucker aktuell in Benutzung"
-            highlight={stats.active_occupations > 0}
-          />
-          <StatCard
-            icon="⏳"
-            label="Warteschlange"
-            value={String(stats.pending_queue_entries)}
-            sub="Nutzer warten auf Drucker"
-          />
+        <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Live-Status</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <StatCard icon="🖨️" label="Aktive Belegungen" value={String(stats.active_occupations)} sub="Drucker aktuell in Benutzung" highlight={stats.active_occupations > 0} />
+          <StatCard icon="⏳" label="Warteschlange" value={String(stats.pending_queue_entries)} sub="Nutzer warten auf Drucker" />
         </div>
       </div>
 
       {/* Umsatz */}
       <div>
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Umsatz</p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <StatCard
-            icon="💰"
-            label="Umsatz diesen Monat"
-            value={formatEur(stats.revenue_this_month_cents)}
-            sub="Druckkosten abgerechnet"
-            highlight
-          />
-          <StatCard
-            icon="📈"
-            label="Umsatz gesamt"
-            value={formatEur(stats.revenue_all_time_cents)}
-            sub="Seit Portalbeginn"
-          />
+        <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Umsatz</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <StatCard icon="💰" label="Umsatz diesen Monat" value={formatEur(stats.revenue_this_month_cents)} sub="Druckkosten abgerechnet" highlight />
+          <StatCard icon="📈" label="Umsatz gesamt" value={formatEur(stats.revenue_all_time_cents)} sub="Seit Portalbeginn" />
         </div>
       </div>
 
       {/* Nutzung */}
       <div>
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Nutzung</p>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard
-            icon="👥"
-            label="Registrierte Nutzer"
-            value={String(stats.users_total)}
-          />
-          <StatCard
-            icon="✅"
-            label="Abgeschlossene Drucke"
-            value={String(stats.prints_completed)}
-            sub="Über das Portal gestartet"
-          />
-          <StatCard
-            icon="💾"
-            label="Belegter Speicher"
-            value={formatBytes(stats.storage_used_total_bytes)}
-            sub="G-Code-Dateien gesamt"
-          />
+        <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Nutzung</p>
+        <div className="grid sm:grid-cols-3 gap-3">
+          <StatCard icon="👥" label="Registrierte Nutzer" value={String(stats.users_total)} />
+          <StatCard icon="✅" label="Abgeschlossene Drucke" value={String(stats.prints_completed)} sub="Über das Portal gestartet" />
+          <StatCard icon="💾" label="Belegter Speicher" value={formatBytes(stats.storage_used_total_bytes)} sub="G-Code-Dateien gesamt" />
         </div>
       </div>
 
       {/* Diagramme */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Diagramme</p>
-          <div className="flex gap-1">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Diagramme</p>
+          <div style={{ display: 'flex', gap: 4 }}>
             {(['7d', '30d', '90d'] as const).map(p => (
               <button
                 key={p}
                 onClick={() => setChartPeriod(p)}
-                className={`px-3 py-1 text-xs rounded-full font-medium transition-colors ${
-                  chartPeriod === p ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                style={{
+                  padding: '4px 10px', fontSize: 11, borderRadius: 20, cursor: 'pointer',
+                  fontFamily: 'inherit', border: 'none',
+                  background: chartPeriod === p ? '#111' : 'var(--surface2)',
+                  color: chartPeriod === p ? '#fff' : 'var(--text2)',
+                  fontWeight: chartPeriod === p ? 700 : 500,
+                }}
               >
                 {p === '7d' ? '7 Tage' : p === '30d' ? '30 Tage' : '90 Tage'}
               </button>
@@ -264,27 +232,21 @@ export default function StatsTab() {
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-600 mb-3">Umsatz (€)</p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div style={{ background: '#fff', border: '0.5px solid var(--border)', borderRadius: 12, padding: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', margin: '0 0 10px' }}>Umsatz (€)</p>
             <SimpleBarChart
-              data={(chartData?.revenue_by_day ?? []).map(d => ({
-                label: d.date.slice(5),  // MM-DD
-                value: d.cents,
-              }))}
-              color="#2563eb"
+              data={(chartData?.revenue_by_day ?? []).map(d => ({ label: d.date.slice(5), value: d.cents }))}
+              color="var(--lime-dark)"
               formatValue={v => `${(v / 100).toFixed(0)}€`}
               emptyText="Kein Umsatz in diesem Zeitraum"
             />
           </div>
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-600 mb-3">Drucke pro Tag</p>
+          <div style={{ background: '#fff', border: '0.5px solid var(--border)', borderRadius: 12, padding: 16 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text2)', margin: '0 0 10px' }}>Drucke pro Tag</p>
             <SimpleBarChart
-              data={(chartData?.prints_by_day ?? []).map(d => ({
-                label: d.date.slice(5),
-                value: d.count,
-              }))}
-              color="#16a34a"
+              data={(chartData?.prints_by_day ?? []).map(d => ({ label: d.date.slice(5), value: d.count }))}
+              color="var(--emerald)"
               formatValue={v => String(v)}
               emptyText="Keine Drucke in diesem Zeitraum"
             />
@@ -294,43 +256,38 @@ export default function StatsTab() {
 
       {/* CSV-Exporte */}
       <div>
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Datenexport</p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => downloadCsv('/admin/transactions/export')}
-            className="px-4 py-2 text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            Transaktionen (CSV)
-          </button>
-          <button
-            onClick={() => downloadCsv('/admin/occupations/export')}
-            className="px-4 py-2 text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            Druckjobs (CSV)
-          </button>
-          <button
-            onClick={() => downloadCsv('/admin/users/export')}
-            className="px-4 py-2 text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            Nutzer (CSV)
-          </button>
+        <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Datenexport</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {[
+            ['/admin/transactions/export', 'Transaktionen (CSV)'],
+            ['/admin/occupations/export', 'Druckjobs (CSV)'],
+            ['/admin/users/export', 'Nutzer (CSV)'],
+          ].map(([url, label]) => (
+            <button
+              key={url}
+              onClick={() => downloadCsv(url)}
+              className="btn-secondary"
+              style={{ padding: '8px 14px', fontSize: 13 }}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Danger Zone */}
-      <div className="border border-red-200 rounded-xl p-4 bg-red-50">
-        <p className="text-xs font-medium text-red-400 uppercase tracking-wide mb-2">Danger Zone</p>
-        <div className="flex items-center justify-between gap-4">
+      <div style={{ border: '0.5px solid var(--red)', borderRadius: 12, padding: '14px 16px', background: 'var(--red-bg)' }}>
+        <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Danger Zone</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <p className="text-sm font-medium text-red-800">Finanzdaten zurücksetzen</p>
-            <p className="text-xs text-red-600 mt-0.5">
+            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)', margin: '0 0 2px' }}>Finanzdaten zurücksetzen</p>
+            <p style={{ fontSize: 12, color: 'var(--red)', margin: 0, opacity: 0.8 }}>
               Setzt alle Guthaben auf 0€ und löscht alle Transaktionen, Voucher-Einlösungen und Topup-Anfragen.
-              Laufende Drucke werden nicht abgebrochen.
             </p>
           </div>
           <button
             onClick={() => setShowResetModal(true)}
-            className="shrink-0 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"
+            style={{ flexShrink: 0, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             Zurücksetzen
           </button>

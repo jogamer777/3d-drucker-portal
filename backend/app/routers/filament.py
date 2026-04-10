@@ -30,6 +30,13 @@ class FilamentTypeCreate(BaseModel):
     markup_percent: int = 20
     stock_count: int = 0
     low_stock_threshold: int = 2
+    # Feature B: Druckparameter
+    print_temp_min: Optional[int] = None
+    print_temp_max: Optional[int] = None
+    bed_temp: Optional[int] = None
+    cooling_percent: Optional[int] = None
+    print_speed_mms: Optional[int] = None
+    notes: Optional[str] = None
 
 
 class FilamentTypeUpdate(BaseModel):
@@ -42,6 +49,13 @@ class FilamentTypeUpdate(BaseModel):
     markup_percent: Optional[int] = None
     stock_count: Optional[int] = None
     low_stock_threshold: Optional[int] = None
+    # Feature B: Druckparameter
+    print_temp_min: Optional[int] = None
+    print_temp_max: Optional[int] = None
+    bed_temp: Optional[int] = None
+    cooling_percent: Optional[int] = None
+    print_speed_mms: Optional[int] = None
+    notes: Optional[str] = None
 
 
 class SlotAssign(BaseModel):
@@ -72,6 +86,13 @@ def _filament_out(ft: FilamentType) -> dict:
         "low_stock_threshold": ft.low_stock_threshold,
         "low_stock": low_stock,
         "created_at": ft.created_at.isoformat(),
+        # Feature B: Druckparameter
+        "print_temp_min": ft.print_temp_min,
+        "print_temp_max": ft.print_temp_max,
+        "bed_temp": ft.bed_temp,
+        "cooling_percent": ft.cooling_percent,
+        "print_speed_mms": ft.print_speed_mms,
+        "notes": ft.notes,
     }
 
 
@@ -127,6 +148,12 @@ def create_filament_type(
         markup_percent=data.markup_percent,
         stock_count=data.stock_count,
         low_stock_threshold=data.low_stock_threshold,
+        print_temp_min=data.print_temp_min,
+        print_temp_max=data.print_temp_max,
+        bed_temp=data.bed_temp,
+        cooling_percent=data.cooling_percent,
+        print_speed_mms=data.print_speed_mms,
+        notes=data.notes,
     )
     db.add(ft)
     db.commit()
@@ -163,6 +190,10 @@ def update_filament_type(
         ft.stock_count = data.stock_count
     if data.low_stock_threshold is not None:
         ft.low_stock_threshold = data.low_stock_threshold
+    # Feature B: Druckparameter
+    for field in ("print_temp_min", "print_temp_max", "bed_temp", "cooling_percent", "print_speed_mms", "notes"):
+        if field in data.model_fields_set:
+            setattr(ft, field, getattr(data, field))
 
     db.commit()
     db.refresh(ft)
@@ -320,6 +351,13 @@ def public_slots(
                     "remaining_weight_g": slot.remaining_weight_g,
                     "initial_weight_g": slot.initial_weight_g,
                     "low_spool": low_spool,
+                    # Feature B: Druckparameter
+                    "print_temp_min": ft.print_temp_min,
+                    "print_temp_max": ft.print_temp_max,
+                    "bed_temp": ft.bed_temp,
+                    "cooling_percent": ft.cooling_percent,
+                    "print_speed_mms": ft.print_speed_mms,
+                    "notes": ft.notes,
                 })
             else:
                 slots.append({
@@ -332,6 +370,12 @@ def public_slots(
                     "remaining_weight_g": None,
                     "initial_weight_g": None,
                     "low_spool": False,
+                    "print_temp_min": None,
+                    "print_temp_max": None,
+                    "bed_temp": None,
+                    "cooling_percent": None,
+                    "print_speed_mms": None,
+                    "notes": None,
                 })
         result[pid] = slots
     return result

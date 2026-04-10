@@ -32,15 +32,10 @@ export default function UsersTab() {
   const [tempPw, setTempPw] = useState('')
   const [actionLoading, setActionLoading] = useState<number | null>(null)
 
-  // Löschen-Modal
   const [deleteModal, setDeleteModal] = useState<{ userId: number; email: string } | null>(null)
-
-  // Guthaben-Modal
   const [balanceModal, setBalanceModal] = useState<AdminUser | null>(null)
   const [balanceAmount, setBalanceAmount] = useState('')
   const [balanceNote, setBalanceNote] = useState('')
-
-  // Nachrichten-Modal
   const [msgModal, setMsgModal] = useState<{ userId: number; email: string } | null>(null)
   const [msgBody, setMsgBody] = useState('')
   const [msgSent, setMsgSent] = useState(false)
@@ -131,7 +126,6 @@ export default function UsersTab() {
     setMsgSent(false)
   }
 
-  // Prüfe ob Nutzer eine ungelesene Antwort hat
   const getUserReply = (userId: number): AdminMessage | undefined =>
     messages.find(m => {
       const u = users.find(u => u.email === m.to_user_email)
@@ -142,104 +136,102 @@ export default function UsersTab() {
   const formatDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–'
 
-  if (loading) return <p className="text-sm text-gray-400 p-4">Laden...</p>
+  if (loading) return <p style={{ fontSize: 13, color: 'var(--text3)', padding: 16 }}>Laden...</p>
+
+  const modalStyle = { background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 400, width: '100%', padding: 24 }
+  const labelStyle = { fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">{users.length} Nutzer gesamt</p>
-        <div className="flex items-center gap-3">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <p style={{ fontSize: 13, color: 'var(--text3)', margin: 0 }}>{users.length} Nutzer gesamt</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="text"
             value={userSearch}
             onChange={e => setUserSearch(e.target.value)}
             placeholder="E-Mail suchen..."
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+            className="input-lime"
+            style={{ fontSize: 12, width: 180 }}
           />
           <button
             onClick={() => window.open('/api/admin/users/export', '_blank')}
-            className="text-sm border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
+            className="btn-secondary"
+            style={{ padding: '6px 12px', fontSize: 12 }}
           >
             CSV exportieren
           </button>
-          <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+          <button onClick={load} style={{ fontSize: 12, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Aktualisieren</button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
           <thead>
-            <tr className="text-left text-gray-500 border-b border-gray-200">
-              <th className="pb-2 font-medium">E-Mail</th>
-              <th className="pb-2 font-medium">Rolle</th>
-              <th className="pb-2 font-medium">Guthaben</th>
-              <th className="pb-2 font-medium">Status</th>
-              <th className="pb-2 font-medium">Letzter Login</th>
-              <th className="pb-2 font-medium">Aktionen</th>
+            <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+              {['E-Mail', 'Rolle', 'Guthaben', 'Status', 'Letzter Login', 'Aktionen'].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {users.filter(u => u.email.toLowerCase().includes(userSearch.toLowerCase())).map(u => {
               const reply = getUserReply(u.id)
               return (
-                <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-2 font-medium text-gray-900">{u.email}</td>
-                  <td className="py-2">
+                <tr key={u.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text)' }}>{u.email}</td>
+                  <td style={{ padding: '8px 12px' }}>
                     <select
                       value={u.role}
                       onChange={e => updateUser(u.id, { role: e.target.value })}
                       disabled={actionLoading === u.id}
-                      className="border border-gray-200 rounded px-2 py-1 text-xs bg-white"
+                      style={{ border: '0.5px solid var(--border)', borderRadius: 6, padding: '3px 6px', fontSize: 11, background: '#fff', fontFamily: 'inherit' }}
                     >
                       <option value="normal">Normal</option>
                       <option value="power_user">Power-User</option>
                       <option value="admin">Admin</option>
                     </select>
                   </td>
-                  <td className="py-2 text-gray-700">{formatBalance(u.balance_cents)}</td>
-                  <td className="py-2">
+                  <td style={{ padding: '8px 12px', color: 'var(--text2)' }}>{formatBalance(u.balance_cents)}</td>
+                  <td style={{ padding: '8px 12px' }}>
                     {u.is_blocked ? (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-medium">Gesperrt</span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--red-bg)', color: 'var(--red)' }}>Gesperrt</span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700 font-medium">Aktiv</span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--emerald-bg)', color: 'var(--emerald)' }}>Aktiv</span>
                     )}
                   </td>
-                  <td className="py-2 text-gray-500">{formatDate(u.last_login_at)}</td>
-                  <td className="py-2">
-                    <div className="flex gap-1 flex-wrap">
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12 }}>{formatDate(u.last_login_at)}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       <button
                         onClick={() => updateUser(u.id, { is_blocked: !u.is_blocked })}
                         disabled={actionLoading === u.id}
-                        className={`text-xs px-2 py-1 rounded border transition-colors ${
-                          u.is_blocked
-                            ? 'border-green-300 text-green-700 hover:bg-green-50'
-                            : 'border-red-300 text-red-700 hover:bg-red-50'
-                        }`}
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: u.is_blocked ? '0.5px solid var(--emerald)' : '0.5px solid var(--red)', background: 'transparent', color: u.is_blocked ? 'var(--emerald)' : 'var(--red)' }}
                       >
                         {u.is_blocked ? 'Entsperren' : 'Sperren'}
                       </button>
                       <button
                         onClick={() => { setResetModal({ userId: u.id, email: u.email }); setTempPw('') }}
-                        className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--border)', background: 'transparent', color: 'var(--text2)' }}
                       >
                         PW Reset
                       </button>
                       <button
                         onClick={() => { setBalanceModal(u); setBalanceAmount(''); setBalanceNote('') }}
-                        className="text-xs px-2 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50"
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--emerald)', background: 'transparent', color: 'var(--emerald)' }}
                       >
                         Guthaben
                       </button>
                       <button
                         onClick={() => openMsgModal(u)}
-                        className="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 flex items-center gap-1"
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--blue)', background: 'transparent', color: 'var(--blue)' }}
                       >
                         Nachricht{reply ? ' 💬' : ''}
                       </button>
                       <button
                         onClick={() => setDeleteModal({ userId: u.id, email: u.email })}
                         disabled={actionLoading === u.id}
-                        className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50"
+                        style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--red)', background: 'transparent', color: 'var(--red)' }}
                       >
                         Löschen
                       </button>
@@ -255,42 +247,28 @@ export default function UsersTab() {
       {/* Guthaben-Modal */}
       {balanceModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-1">Guthaben anpassen</h3>
-            <p className="text-sm text-gray-500 mb-1">{balanceModal.email}</p>
-            <p className="text-sm font-medium text-gray-700 mb-4">
-              Aktuell: <span className="text-green-700">{formatBalance(balanceModal.balance_cents)}</span>
+          <div style={modalStyle}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Guthaben anpassen</h3>
+            <p style={{ fontSize: 12, color: 'var(--text3)', margin: '0 0 4px' }}>{balanceModal.email}</p>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)', margin: '0 0 16px' }}>
+              Aktuell: <span style={{ color: 'var(--emerald)' }}>{formatBalance(balanceModal.balance_cents)}</span>
             </p>
-            <label className="block text-xs text-gray-500 mb-1">Betrag (€)</label>
-            <input
-              type="number"
-              value={balanceAmount}
-              onChange={e => setBalanceAmount(e.target.value)}
-              min="0.01" step="0.01" placeholder="5.00"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <label className="block text-xs text-gray-500 mb-1">Grund (Pflicht)</label>
-            <input
-              type="text"
-              value={balanceNote}
-              onChange={e => setBalanceNote(e.target.value)}
-              placeholder="z.B. Rückerstattung Druck #42"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setBalanceModal(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm"
-              >Abbrechen</button>
+            <label style={labelStyle}>Betrag (€)</label>
+            <input type="number" value={balanceAmount} onChange={e => setBalanceAmount(e.target.value)} min="0.01" step="0.01" placeholder="5.00" className="input-lime" style={{ marginBottom: 10 }} />
+            <label style={labelStyle}>Grund (Pflicht)</label>
+            <input type="text" value={balanceNote} onChange={e => setBalanceNote(e.target.value)} placeholder="z.B. Rückerstattung Druck #42" className="input-lime" style={{ marginBottom: 16 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setBalanceModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
               <button
                 onClick={() => adjustBalance('sub')}
                 disabled={!balanceAmount || !balanceNote.trim() || parseFloat(balanceAmount) <= 0 || actionLoading === balanceModal.id}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-medium"
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: (!balanceAmount || !balanceNote.trim()) ? 0.4 : 1 }}
               >Abziehen</button>
               <button
                 onClick={() => adjustBalance('add')}
                 disabled={!balanceAmount || !balanceNote.trim() || parseFloat(balanceAmount) <= 0 || actionLoading === balanceModal.id}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-medium"
+                className="btn-lime"
+                style={{ flex: 1, padding: '9px 0' }}
               >Hinzufügen</button>
             </div>
           </div>
@@ -300,25 +278,20 @@ export default function UsersTab() {
       {/* Passwort-Reset Modal */}
       {resetModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">Passwort zurücksetzen</h3>
-            <p className="text-sm text-gray-600 mb-4">{resetModal.email}</p>
+          <div style={modalStyle}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Passwort zurücksetzen</h3>
+            <p style={{ fontSize: 13, color: 'var(--text3)', margin: '0 0 16px' }}>{resetModal.email}</p>
             {!tempPw ? (
               <>
-                <p className="text-sm text-gray-500 mb-4">
+                <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>
                   Ein neues temporäres Passwort wird generiert. Der Nutzer muss es beim nächsten Login ändern.
                 </p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setResetModal(null)}
-                    className="flex-1 border border-gray-300 rounded-lg py-2 text-sm"
-                  >
-                    Abbrechen
-                  </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setResetModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
                   <button
                     onClick={resetPassword}
                     disabled={actionLoading === resetModal.userId}
-                    className="flex-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg py-2 text-sm"
+                    style={{ flex: 1, background: 'var(--amber)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
                   >
                     Reset durchführen
                   </button>
@@ -326,14 +299,11 @@ export default function UsersTab() {
               </>
             ) : (
               <>
-                <p className="text-sm text-gray-600 mb-2">Temporäres Passwort (bitte notieren!):</p>
-                <code className="block bg-gray-100 rounded-lg px-4 py-3 text-lg font-mono text-center tracking-widest mb-4 select-all">
+                <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>Temporäres Passwort (bitte notieren!):</p>
+                <code style={{ display: 'block', background: 'var(--surface2)', borderRadius: 10, padding: '12px 16px', fontSize: 20, fontFamily: 'var(--mono)', textAlign: 'center', letterSpacing: '0.1em', marginBottom: 16 }}>
                   {tempPw}
                 </code>
-                <button
-                  onClick={() => setResetModal(null)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm"
-                >
+                <button onClick={() => setResetModal(null)} className="btn-lime" style={{ width: '100%', padding: '10px 0' }}>
                   Schließen
                 </button>
               </>
@@ -345,23 +315,18 @@ export default function UsersTab() {
       {/* Löschen-Modal */}
       {deleteModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">Nutzer löschen</h3>
-            <p className="text-sm text-gray-600 mb-3">{deleteModal.email}</p>
-            <p className="text-sm text-red-600 mb-5">
+          <div style={modalStyle}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Nutzer löschen</h3>
+            <p style={{ fontSize: 13, color: 'var(--text3)', margin: '0 0 10px' }}>{deleteModal.email}</p>
+            <p style={{ fontSize: 13, color: 'var(--red)', marginBottom: 20 }}>
               Alle Transaktionen und Nachrichten dieses Nutzers werden mitgelöscht. Diese Aktion ist nicht rückgängig zu machen!
             </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDeleteModal(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm"
-              >
-                Abbrechen
-              </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setDeleteModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
               <button
                 onClick={deleteUser}
                 disabled={actionLoading === deleteModal.userId}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-medium"
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Endgültig löschen
               </button>
@@ -373,36 +338,30 @@ export default function UsersTab() {
       {/* Nachrichten-Modal */}
       {msgModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-1">Nachricht senden</h3>
-            <p className="text-sm text-gray-500 mb-4">{msgModal.email}</p>
+          <div style={{ ...modalStyle, maxWidth: 460 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Nachricht senden</h3>
+            <p style={{ fontSize: 12, color: 'var(--text3)', margin: '0 0 16px' }}>{msgModal.email}</p>
 
-            {/* Vorherige Antwort anzeigen */}
             {(() => {
               const reply = getUserReply(msgModal.userId)
               if (!reply) return null
               return (
-                <div className="bg-blue-50 rounded-lg p-3 mb-4 text-sm">
-                  <p className="font-medium text-blue-700 mb-1">Antwort des Nutzers:</p>
-                  <p className="text-gray-700 whitespace-pre-wrap">{reply.reply}</p>
-                  <p className="text-xs text-gray-400 mt-1">{formatDate(reply.replied_at)}</p>
-                  <hr className="my-2 border-blue-100"/>
-                  <p className="text-xs text-gray-500">Ihre ursprüngliche Nachricht: {reply.body}</p>
+                <div style={{ background: 'var(--blue-bg)', border: '0.5px solid var(--blue)', borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 12 }}>
+                  <p style={{ fontWeight: 700, color: 'var(--blue)', margin: '0 0 4px' }}>Antwort des Nutzers:</p>
+                  <p style={{ color: 'var(--text2)', whiteSpace: 'pre-wrap', margin: '0 0 4px' }}>{reply.reply}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text3)', margin: '0 0 6px' }}>{formatDate(reply.replied_at)}</p>
+                  <hr style={{ borderColor: 'var(--border)', margin: '6px 0' }} />
+                  <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0 }}>Ihre ursprüngliche Nachricht: {reply.body}</p>
                 </div>
               )
             })()}
 
             {msgSent ? (
               <>
-                <p className="text-sm text-green-700 bg-green-50 rounded-lg px-4 py-3 mb-4">
+                <div style={{ background: 'var(--emerald-bg)', border: '0.5px solid var(--emerald)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--emerald)', marginBottom: 14 }}>
                   Nachricht wurde gesendet. Sie erscheint beim nächsten Login des Nutzers.
-                </p>
-                <button
-                  onClick={() => setMsgModal(null)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 text-sm"
-                >
-                  Schließen
-                </button>
+                </div>
+                <button onClick={() => setMsgModal(null)} className="btn-lime" style={{ width: '100%', padding: '10px 0' }}>Schließen</button>
               </>
             ) : (
               <>
@@ -411,19 +370,16 @@ export default function UsersTab() {
                   onChange={e => setMsgBody(e.target.value)}
                   placeholder="Nachricht eingeben..."
                   rows={4}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                  className="input-lime"
+                  style={{ resize: 'none', marginBottom: 14 }}
                 />
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setMsgModal(null)}
-                    className="flex-1 border border-gray-300 rounded-lg py-2 text-sm"
-                  >
-                    Abbrechen
-                  </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setMsgModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
                   <button
                     onClick={sendMessage}
                     disabled={!msgBody.trim() || actionLoading === msgModal.userId}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-medium"
+                    className="btn-lime"
+                    style={{ flex: 1, padding: '9px 0' }}
                   >
                     Senden
                   </button>

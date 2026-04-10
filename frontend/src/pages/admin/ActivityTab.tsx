@@ -9,17 +9,27 @@ interface ActivityLog {
   created_at: string
 }
 
-const ACTION_CONFIG: Record<string, { label: string; color: string }> = {
-  register:          { label: 'Registrierung',         color: 'bg-blue-100 text-blue-700' },
-  login:             { label: 'Login',                  color: 'bg-green-100 text-green-700' },
-  login_failed:      { label: 'Login fehlgesch.',       color: 'bg-red-100 text-red-700' },
-  voucher_redeem:    { label: 'Code eingelöst',         color: 'bg-purple-100 text-purple-700' },
-  file_upload:       { label: 'Datei hochgeladen',      color: 'bg-indigo-100 text-indigo-700' },
-  file_delete:       { label: 'Datei gelöscht',         color: 'bg-orange-100 text-orange-700' },
-  admin_file_delete: { label: 'Admin: Datei gelöscht',  color: 'bg-red-100 text-red-700' },
+type Filter = 'all' | 'register' | 'login' | 'login_failed' | 'voucher_redeem' | 'file_upload' | 'file_delete'
+
+function actionBadgeStyle(action: string): React.CSSProperties {
+  if (action === 'register') return { background: 'var(--blue-bg)', color: 'var(--blue)' }
+  if (action === 'login') return { background: 'var(--emerald-bg)', color: 'var(--emerald)' }
+  if (action === 'login_failed') return { background: 'var(--red-bg)', color: 'var(--red)' }
+  if (action === 'voucher_redeem') return { background: '#f3e8ff', color: '#7c3aed' }
+  if (action === 'file_upload') return { background: '#e0e7ff', color: '#4338ca' }
+  if (action === 'file_delete' || action === 'admin_file_delete') return { background: 'var(--amber-bg)', color: 'var(--amber)' }
+  return { background: 'var(--surface2)', color: 'var(--text3)' }
 }
 
-type Filter = 'all' | 'register' | 'login' | 'login_failed' | 'voucher_redeem' | 'file_upload' | 'file_delete'
+const ACTION_LABELS: Record<string, string> = {
+  register: 'Registrierung',
+  login: 'Login',
+  login_failed: 'Login fehlgesch.',
+  voucher_redeem: 'Code eingelöst',
+  file_upload: 'Datei hochgeladen',
+  file_delete: 'Datei gelöscht',
+  admin_file_delete: 'Admin: Datei gelöscht',
+}
 
 export default function ActivityTab() {
   const [logs, setLogs] = useState<ActivityLog[]>([])
@@ -45,79 +55,69 @@ export default function ActivityTab() {
 
   const count = (action: string) => logs.filter(l => l.action === action).length
 
+  const pillBtn = (active: boolean, onClick: () => void, label: string) => (
+    <button onClick={onClick} style={{ padding: '4px 10px', fontSize: 11, borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: active ? '#111' : 'var(--surface2)', color: active ? '#fff' : 'var(--text2)', fontWeight: active ? 700 : 500 }}>{label}</button>
+  )
+
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        {/* Filter-Buttons */}
-        <div className="flex flex-wrap gap-2">
-          {([
-            ['all', `Alle (${logs.length})`],
-            ['register', `Registrierung (${count('register')})`],
-            ['login', `Login (${count('login')})`],
-            ['login_failed', `Fehlschlag (${count('login_failed')})`],
-            ['voucher_redeem', `Code eingelöst (${count('voucher_redeem')})`],
-            ['file_upload', `Upload (${count('file_upload')})`],
-            ['file_delete', `Datei gelöscht (${count('file_delete')})`],
-          ] as const).map(([f, label]) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >{label}</button>
-          ))}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          {pillBtn(filter === 'all', () => setFilter('all'), `Alle (${logs.length})`)}
+          {pillBtn(filter === 'register', () => setFilter('register'), `Registrierung (${count('register')})`)}
+          {pillBtn(filter === 'login', () => setFilter('login'), `Login (${count('login')})`)}
+          {pillBtn(filter === 'login_failed', () => setFilter('login_failed'), `Fehlschlag (${count('login_failed')})`)}
+          {pillBtn(filter === 'voucher_redeem', () => setFilter('voucher_redeem'), `Code eingelöst (${count('voucher_redeem')})`)}
+          {pillBtn(filter === 'file_upload', () => setFilter('file_upload'), `Upload (${count('file_upload')})`)}
+          {pillBtn(filter === 'file_delete', () => setFilter('file_delete'), `Datei gelöscht (${count('file_delete')})`)}
         </div>
 
-        {/* Suche */}
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="E-Mail suchen..."
-          className="ml-auto border border-gray-300 rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+          className="input-lime"
+          style={{ marginLeft: 'auto', fontSize: 12, width: 180 }}
         />
-        <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        <button onClick={load} style={{ fontSize: 12, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Aktualisieren</button>
         <a
           href="/api/admin/activity/export"
           download
-          className="text-sm text-gray-600 border border-gray-300 rounded-lg px-3 py-1 hover:bg-gray-50 transition-colors"
+          className="btn-secondary"
+          style={{ fontSize: 12, padding: '6px 10px', textDecoration: 'none' }}
         >
           CSV exportieren
         </a>
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400">Laden...</p>
+        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Laden...</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">Keine Einträge gefunden.</p>
+        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Keine Einträge gefunden.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200">
-                <th className="pb-2 font-medium">Datum & Uhrzeit</th>
-                <th className="pb-2 font-medium">Nutzer</th>
-                <th className="pb-2 font-medium">Aktion</th>
-                <th className="pb-2 font-medium">Details</th>
+              <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                {['Datum & Uhrzeit', 'Nutzer', 'Aktion', 'Details'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map(log => {
-                const cfg = ACTION_CONFIG[log.action] ?? { label: log.action, color: 'bg-gray-100 text-gray-600' }
-                return (
-                  <tr key={log.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-2 text-gray-500 whitespace-nowrap">{formatDate(log.created_at)}</td>
-                    <td className="py-2 font-medium text-gray-800">{log.actor_email ?? '–'}</td>
-                    <td className="py-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
-                        {cfg.label}
-                      </span>
-                    </td>
-                    <td className="py-2 text-gray-600">{log.details ?? '–'}</td>
-                  </tr>
-                )
-              })}
+              {filtered.map(log => (
+                <tr key={log.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12, whiteSpace: 'nowrap', fontFamily: 'var(--mono)' }}>{formatDate(log.created_at)}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text)' }}>{log.actor_email ?? '–'}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, ...actionBadgeStyle(log.action) }}>
+                      {ACTION_LABELS[log.action] ?? log.action}
+                    </span>
+                  </td>
+                  <td style={{ padding: '8px 12px', color: 'var(--text2)' }}>{log.details ?? '–'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

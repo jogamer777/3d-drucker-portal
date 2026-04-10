@@ -1,6 +1,110 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #f4f3f0;
+  --lime: #c8ff00;
+  --lime-dark: #a5d600;
+  --lime-bg: #f4ffc0;
+  --emerald: #10b981;
+  --emerald-bg: #ecfdf5;
+  --blue: #2563eb;
+  --blue-bg: #eff6ff;
+  --red: #ef4444;
+  --red-bg: #fef2f2;
+  --amber: #f59e0b;
+  --amber-bg: #fffbeb;
+  --border: #e5e3de;
+  --surface2: #f0efec;
+  --text: #111;
+  --text2: #777;
+  --text3: #aaa;
+  --mono: 'Space Mono', 'SF Mono', ui-monospace, monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-mono-data {
+  font-family: var(--mono);
+}
+
+/* Status dot glow shadows */
+.status-dot-ready    { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25); }
+.status-dot-printing { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25); }
+.status-dot-warning  { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25); }
+.status-dot-error    { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25); }
+.status-dot-offline  { box-shadow: none; }
+
+/* Webcam card overlay gradient */
+.webcam-overlay {
+  background: linear-gradient(transparent 30%, rgba(0, 0, 0, 0.72));
+}
+
+/* LIVE badge blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.live-dot {
+  animation: blink 1.4s infinite;
+}
+
+/* Lime focus ring for inputs */
+.input-lime {
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 13px;
+  font-size: 14px;
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.15s;
+  background: #fff;
+  color: var(--text);
+}
+.input-lime:focus {
+  border-color: var(--lime-dark);
+}
+
+/* Primary lime button */
+.btn-lime {
+  background: var(--lime);
+  color: #111;
+  font-weight: 800;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.btn-lime:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.btn-lime:not(:disabled):hover {
+  opacity: 0.88;
+}
+
+/* Secondary border button */
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 10px;
+  border: 0.5px solid var(--border);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.btn-secondary:hover {
+  background: var(--surface2);
 }

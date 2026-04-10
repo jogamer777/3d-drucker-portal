@@ -7,10 +7,11 @@ import Dashboard from './pages/Dashboard'
 import Wallet from './pages/Wallet'
 import Files from './pages/Files'
 import AdminPanel from './pages/admin/AdminPanel'
-import Printers from './pages/Printers'
 import PrinterDetail from './pages/PrinterDetail'
 import Prints from './pages/Prints'
 import Settings from './pages/Settings'
+import PrintFlow from './pages/PrintFlow'
+import PrintSuccess from './pages/PrintSuccess'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { accessToken } = useAuthStore()
@@ -35,8 +36,9 @@ export default function App() {
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/guthaben" element={<Wallet />} />
-          <Route path="/drucker" element={<Printers />} />
           <Route path="/drucker/:id" element={<PrinterDetail />} />
+          <Route path="/drucker/:id/drucken" element={<PrintFlow />} />
+          <Route path="/drucker/:id/drucken/success" element={<PrintSuccess />} />
           <Route path="/dateien" element={<Files />} />
           <Route path="/drucke" element={<Prints />} />
           <Route path="/einstellungen" element={<Settings />} />

@@ -111,75 +111,78 @@ export default function PrintersTab() {
     }
   }
 
-  if (loading) return <div className="text-sm text-gray-400 py-8 text-center">Lade Drucker-Konfiguration...</div>
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>Lade Drucker-Konfiguration...</div>
 
   if (Object.keys(configs).length === 0) {
-    return <div className="text-sm text-gray-500 py-8 text-center">Keine konfigurierbaren Drucker vorhanden.</div>
+    return <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>Keine konfigurierbaren Drucker vorhanden.</div>
   }
 
+  const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: 4 }
+  const hintStyle: React.CSSProperties = { fontSize: 11, color: 'var(--text3)', marginTop: 3 }
+
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {Object.entries(configs).map(([pid, cfg]) => (
-        <div key={pid} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div key={pid} style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', overflow: 'hidden' }}>
+          <div style={{ padding: '12px 18px', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <h3 className="font-semibold text-gray-900">{cfg.name}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">OctoPrint · {cfg.url}</p>
+              <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>{cfg.name}</h3>
+              <p style={{ fontSize: 11, color: 'var(--text3)', margin: '2px 0 0' }}>OctoPrint · {cfg.url}</p>
             </div>
             <button
               onClick={() => test(pid)}
               disabled={testing === pid}
-              className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-gray-600"
+              className="btn-secondary"
+              style={{ fontSize: 11, padding: '5px 12px', opacity: testing === pid ? 0.5 : 1 }}
             >
               {testing === pid ? 'Teste...' : 'Verbindung testen'}
             </button>
           </div>
 
           {testResult[pid] && (
-            <div className={`px-5 py-2 text-xs font-medium ${testResult[pid].ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+            <div style={{ padding: '8px 18px', fontSize: 12, fontWeight: 600, background: testResult[pid].ok ? 'var(--emerald-bg)' : 'var(--red-bg)', color: testResult[pid].ok ? 'var(--emerald)' : 'var(--red)' }}>
               {testResult[pid].ok ? '✓ ' : '✗ '}{testResult[pid].msg}
             </div>
           )}
 
-          <div className="px-5 py-4 space-y-4">
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">OctoPrint API-Key</label>
+              <label style={labelStyle}>OctoPrint API-Key</label>
               <input
                 type="password"
                 value={form[pid]?.api_key ?? ''}
                 onChange={e => setForm(f => ({ ...f, [pid]: { ...f[pid], api_key: e.target.value } }))}
                 placeholder="API-Key aus OctoPrint Settings"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-lime"
+                style={{ fontSize: 13 }}
               />
-              <p className="text-xs text-gray-400 mt-1">
-                OctoPrint → Settings → API → Global API Key
-              </p>
+              <p style={hintStyle}>OctoPrint → Settings → API → Global API Key</p>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Webcam-Pfad</label>
+              <label style={labelStyle}>Webcam-Pfad</label>
               <input
                 type="text"
                 value={form[pid]?.webcam_path ?? ''}
                 onChange={e => setForm(f => ({ ...f, [pid]: { ...f[pid], webcam_path: e.target.value } }))}
                 placeholder="/printers/crx/webcam"
-                className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-lime"
+                style={{ fontSize: 13 }}
               />
-              <p className="text-xs text-gray-400 mt-1">
-                nginx-Proxy-Pfad für den Webcam-Stream (leer = kein Webcam)
-              </p>
+              <p style={hintStyle}>nginx-Proxy-Pfad für den Webcam-Stream (leer = kein Webcam)</p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 onClick={() => save(pid)}
                 disabled={saving === pid}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
+                className="btn-lime"
+                style={{ padding: '8px 16px', fontSize: 13, opacity: saving === pid ? 0.6 : 1 }}
               >
                 {saving === pid ? 'Speichert...' : 'Speichern'}
               </button>
               {saveMsg[pid] && (
-                <span className={`text-sm ${saveMsg[pid] === 'Gespeichert!' ? 'text-green-600' : 'text-red-600'}`}>
+                <span style={{ fontSize: 13, color: saveMsg[pid] === 'Gespeichert!' ? 'var(--emerald)' : 'var(--red)', fontWeight: 600 }}>
                   {saveMsg[pid]}
                 </span>
               )}
@@ -187,13 +190,14 @@ export default function PrintersTab() {
           </div>
 
           {/* Wartungsprotokoll */}
-          <div className="px-5 py-4 border-t border-gray-100">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Wartungsprotokoll</h4>
-            <div className="flex gap-2 mb-3">
+          <div style={{ padding: '14px 18px', borderTop: '0.5px solid var(--border)' }}>
+            <h4 style={{ fontSize: 12, fontWeight: 800, color: 'var(--text2)', margin: '0 0 10px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Wartungsprotokoll</h4>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
               <select
                 value={maintForm[pid]?.action ?? MAINTENANCE_ACTIONS[0]}
                 onChange={e => setMaintForm(m => ({ ...m, [pid]: { ...m[pid], action: e.target.value } }))}
-                className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-lime"
+                style={{ fontSize: 12 }}
               >
                 {MAINTENANCE_ACTIONS.map(a => <option key={a}>{a}</option>)}
               </select>
@@ -202,32 +206,34 @@ export default function PrintersTab() {
                 value={maintForm[pid]?.notes ?? ''}
                 onChange={e => setMaintForm(m => ({ ...m, [pid]: { ...m[pid], notes: e.target.value } }))}
                 placeholder="Notiz (optional)"
-                className="flex-1 text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="input-lime"
+                style={{ flex: 1, fontSize: 12 }}
               />
               <button
                 onClick={() => addMaintenance(pid)}
                 disabled={maintSaving === pid}
-                className="text-sm bg-gray-800 hover:bg-gray-900 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg whitespace-nowrap"
+                className="btn-lime"
+                style={{ fontSize: 12, padding: '7px 14px', whiteSpace: 'nowrap', opacity: maintSaving === pid ? 0.5 : 1 }}
               >
                 {maintSaving === pid ? '...' : 'Eintragen'}
               </button>
             </div>
             {(maintenance[pid] ?? []).slice(0, 5).length > 0 ? (
-              <div className="space-y-1.5">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {(maintenance[pid] ?? []).slice(0, 5).map(e => (
-                  <div key={e.id} className="flex items-start justify-between text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                  <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', fontSize: 12, background: 'var(--surface2)', borderRadius: 8, padding: '7px 10px', color: 'var(--text2)' }}>
                     <div>
-                      <span className="font-medium">{e.action}</span>
-                      {e.notes && <span className="text-gray-400"> · {e.notes}</span>}
+                      <span style={{ fontWeight: 600 }}>{e.action}</span>
+                      {e.notes && <span style={{ color: 'var(--text3)' }}> · {e.notes}</span>}
                     </div>
-                    <span className="text-gray-400 whitespace-nowrap ml-2">
+                    <span style={{ color: 'var(--text3)', whiteSpace: 'nowrap', marginLeft: 8, fontSize: 11 }}>
                       {new Date(e.created_at).toLocaleDateString('de-DE')}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-gray-400">Noch keine Einträge.</p>
+              <p style={{ fontSize: 12, color: 'var(--text3)' }}>Noch keine Einträge.</p>
             )}
           </div>
         </div>

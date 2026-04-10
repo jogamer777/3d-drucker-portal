@@ -21,13 +21,14 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  pending:  'bg-yellow-100 text-yellow-800',
-  approved: 'bg-green-100 text-green-700',
-  rejected: 'bg-red-100 text-red-700',
+function statusBadgeStyle(status: string): React.CSSProperties {
+  if (status === 'pending') return { background: 'var(--amber-bg)', color: 'var(--amber)' }
+  if (status === 'approved') return { background: 'var(--emerald-bg)', color: 'var(--emerald)' }
+  return { background: 'var(--red-bg)', color: 'var(--red)' }
 }
+
 const STATUS_LABEL: Record<string, string> = {
-  pending:  'Offen',
+  pending: 'Offen',
   approved: 'Genehmigt',
   rejected: 'Abgelehnt',
 }
@@ -82,79 +83,68 @@ export default function TopupRequestsTab() {
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
 
+  const pillBtn = (active: boolean, onClick: () => void, label: string) => (
+    <button onClick={onClick} style={{ padding: '5px 14px', fontSize: 12, borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: active ? '#111' : 'var(--surface2)', color: active ? '#fff' : 'var(--text2)', fontWeight: active ? 700 : 500 }}>{label}</button>
+  )
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-2">
-          {(['pending', 'all'] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-                filter === f
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
-            >
-              {f === 'pending' ? `Offen${pendingCount > 0 ? ` (${pendingCount})` : ''}` : 'Alle'}
-            </button>
-          ))}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {pillBtn(filter === 'pending', () => setFilter('pending'), `Offen${pendingCount > 0 ? ` (${pendingCount})` : ''}`)}
+          {pillBtn(filter === 'all', () => setFilter('all'), 'Alle')}
         </div>
-        <button onClick={() => load(filter === 'pending' ? 'pending' : undefined)} className="text-sm text-blue-600 hover:underline">
+        <button onClick={() => load(filter === 'pending' ? 'pending' : undefined)} style={{ fontSize: 12, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
           Aktualisieren
         </button>
       </div>
 
       {loading ? (
-        <div className="text-sm text-gray-400 py-8 text-center">Lade Anträge...</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>Lade Anträge...</div>
       ) : requests.length === 0 ? (
-        <div className="text-sm text-gray-500 py-8 text-center">
+        <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>
           {filter === 'pending' ? 'Keine offenen Anträge.' : 'Keine Anträge vorhanden.'}
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200">
-                <th className="pb-2 font-medium pr-4">Nutzer</th>
-                <th className="pb-2 font-medium pr-4">Betrag</th>
-                <th className="pb-2 font-medium pr-4">Kommentar</th>
-                <th className="pb-2 font-medium pr-4">Datum</th>
-                <th className="pb-2 font-medium pr-4">Status</th>
-                <th className="pb-2 font-medium">Aktionen</th>
+              <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                {['Nutzer', 'Betrag', 'Kommentar', 'Datum', 'Status', 'Aktionen'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {requests.map(req => (
-                <tr key={req.id} className="hover:bg-gray-50">
-                  <td className="py-2.5 pr-4 text-gray-700">{req.user_email}</td>
-                  <td className="py-2.5 pr-4 font-semibold text-gray-900">{formatEur(req.amount_cents)}</td>
-                  <td className="py-2.5 pr-4 text-gray-500 max-w-xs truncate" title={req.note ?? ''}>
-                    {req.note ?? '–'}
-                  </td>
-                  <td className="py-2.5 pr-4 text-gray-500 whitespace-nowrap">{formatDate(req.created_at)}</td>
-                  <td className="py-2.5 pr-4">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[req.status]}`}>
+                <tr key={req.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', color: 'var(--text2)' }}>{req.user_email}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--text)' }}>{formatEur(req.amount_cents)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', maxWidth: 200 }} title={req.note ?? ''}>{req.note ?? '–'}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12, whiteSpace: 'nowrap', fontFamily: 'var(--mono)' }}>{formatDate(req.created_at)}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, ...statusBadgeStyle(req.status) }}>
                       {STATUS_LABEL[req.status]}
                     </span>
                     {req.admin_note && (
-                      <p className="text-xs text-gray-400 mt-0.5">{req.admin_note}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text3)', margin: '2px 0 0' }}>{req.admin_note}</p>
                     )}
                   </td>
-                  <td className="py-2.5">
+                  <td style={{ padding: '8px 12px' }}>
                     {req.status === 'pending' && (
-                      <div className="flex gap-2">
+                      <div style={{ display: 'flex', gap: 6 }}>
                         <button
                           onClick={() => approve(req)}
                           disabled={actionId === req.id}
-                          className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-2.5 py-1 rounded-lg"
+                          className="btn-lime"
+                          style={{ fontSize: 11, padding: '4px 10px' }}
                         >
                           ✓ Genehmigen
                         </button>
                         <button
                           onClick={() => { setRejectModal(req); setRejectNote('') }}
                           disabled={actionId === req.id}
-                          className="text-xs border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50 px-2.5 py-1 rounded-lg"
+                          style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--red)', background: 'transparent', color: 'var(--red)' }}
                         >
                           ✗ Ablehnen
                         </button>
@@ -171,30 +161,26 @@ export default function TopupRequestsTab() {
       {/* Ablehnen-Modal */}
       {rejectModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-1">Antrag ablehnen</h3>
-            <p className="text-sm text-gray-500 mb-3">
+          <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 400, width: '100%', padding: 24 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Antrag ablehnen</h3>
+            <p style={{ fontSize: 12, color: 'var(--text3)', margin: '0 0 14px' }}>
               {rejectModal.user_email} – {formatEur(rejectModal.amount_cents)}
             </p>
-            <label className="block text-sm text-gray-600 mb-1">Grund (optional)</label>
+            <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Grund (optional)</label>
             <textarea
               value={rejectNote}
               onChange={e => setRejectNote(e.target.value)}
               rows={2}
               placeholder="z.B. Zahlung nicht eingegangen"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400 mb-4"
+              className="input-lime"
+              style={{ resize: 'none', marginBottom: 16 }}
             />
-            <div className="flex gap-2">
-              <button
-                onClick={() => setRejectModal(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                Abbrechen
-              </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setRejectModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
               <button
                 onClick={reject}
                 disabled={actionId !== null}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg py-2 text-sm font-medium"
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: actionId !== null ? 0.6 : 1 }}
               >
                 Ablehnen
               </button>

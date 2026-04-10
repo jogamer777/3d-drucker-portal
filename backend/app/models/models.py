@@ -263,6 +263,14 @@ class FilamentType(Base):
     low_stock_threshold  = Column(Integer, default=2, nullable=False)   # Warnung wenn <= Threshold
     created_at           = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+    # Druckparameter (Feature B)
+    print_temp_min       = Column(Integer, nullable=True)   # °C
+    print_temp_max       = Column(Integer, nullable=True)   # °C
+    bed_temp             = Column(Integer, nullable=True)   # °C
+    cooling_percent      = Column(Integer, nullable=True)   # 0–100
+    print_speed_mms      = Column(Integer, nullable=True)   # mm/s
+    notes                = Column(String, nullable=True)    # Freitext
+
     slots = relationship("PrinterSlot", back_populates="filament_type")
 
 

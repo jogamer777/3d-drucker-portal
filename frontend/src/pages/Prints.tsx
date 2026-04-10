@@ -19,7 +19,7 @@ const PRINTER_NAMES: Record<string, string> = {
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString('de-DE', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
+    day: '2-digit', month: '2-digit', year: '2-digit',
     hour: '2-digit', minute: '2-digit',
   })
 }
@@ -28,10 +28,8 @@ function formatDuration(start: string, end: string | null): string {
   if (!end) return '–'
   const ms = new Date(end).getTime() - new Date(start).getTime()
   const totalMin = Math.round(ms / 60000)
-  const h = Math.floor(totalMin / 60)
-  const m = totalMin % 60
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+  const h = Math.floor(totalMin / 60), m = totalMin % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 function formatCost(cents: number | null): string {
@@ -44,73 +42,62 @@ export default function Prints() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/user/prints')
-      .then(r => setPrints(r.data))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    api.get('/user/prints').then(r => setPrints(r.data)).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Meine Drucke</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Verlauf aller abgeschlossenen Druckaufträge</p>
-        </div>
-        <Link to="/" className="text-sm text-gray-500 hover:text-gray-700">← Dashboard</Link>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.04em', margin: 0 }}>Meine Drucke</h1>
+        <p style={{ fontSize: 13, color: 'var(--text3)', margin: '4px 0 0' }}>Verlauf aller abgeschlossenen Druckaufträge</p>
       </div>
 
       {loading ? (
-        <div className="text-sm text-gray-400 py-12 text-center">Lade Druckverlauf...</div>
+        <p style={{ color: 'var(--text3)', fontSize: 14, textAlign: 'center', padding: '48px 0' }}>Lade Druckverlauf...</p>
       ) : prints.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <p className="text-4xl mb-3">🖨️</p>
-          <p className="text-gray-500 font-medium">Noch keine Drucke</p>
-          <p className="text-sm text-gray-400 mt-1">Abgeschlossene Druckaufträge erscheinen hier.</p>
-          <Link to="/drucker" className="inline-block mt-4 text-sm text-blue-600 hover:underline">
-            Zu den Druckern →
+        <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: '48px 24px', textAlign: 'center' }}>
+          <svg style={{ margin: '0 auto 12px', display: 'block' }} width="36" height="36" viewBox="0 0 20 20" fill="none" stroke="var(--text3)" strokeWidth="1.2"><rect x="2" y="5" width="16" height="12" rx="2" /><path d="M2 9h16M6 13h4" /></svg>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text2)', margin: '0 0 4px' }}>Noch keine Drucke</p>
+          <p style={{ fontSize: 13, color: 'var(--text3)', margin: '0 0 14px' }}>Abgeschlossene Druckaufträge erscheinen hier.</p>
+          <Link to="/" style={{ fontSize: 13, color: 'var(--lime-dark)', fontWeight: 700, textDecoration: 'none' }}>
+            Zum Dashboard →
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Datum</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Drucker</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Datei</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Dauer</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Kosten</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+        <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', overflow: 'hidden' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--text)' }}>
+                {['Datum', 'Drucker', 'Datei', 'Dauer', 'Kosten', 'Status'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '10px 14px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--surface2)' }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
-              {prints.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+            <tbody>
+              {prints.map((p, i) => (
+                <tr key={p.id} style={{ borderBottom: i < prints.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
+                  <td style={{ padding: '10px 14px', color: 'var(--text2)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 12 }}>
                     {formatDate(p.claimed_at)}
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td style={{ padding: '10px 14px', color: 'var(--text)' }}>
                     {PRINTER_NAMES[p.printer_id] ?? p.printer_id}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 max-w-xs truncate" title={p.filename ?? ''}>
+                  <td style={{ padding: '10px 14px', color: 'var(--text)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.filename ?? ''}>
                     {p.filename ?? '–'}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  <td style={{ padding: '10px 14px', color: 'var(--text2)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 12 }}>
                     {formatDuration(p.claimed_at, p.completed_at)}
                   </td>
-                  <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-medium">
+                  <td style={{ padding: '10px 14px', fontWeight: 800, whiteSpace: 'nowrap', fontFamily: 'var(--mono)' }}>
                     {formatCost(p.charged_cost_cents)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td style={{ padding: '10px 14px' }}>
                     {p.status === 'released' ? (
-                      <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                        Abgeholt
-                      </span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--emerald-bg)', color: 'var(--emerald)', fontWeight: 700 }}>Abgeholt</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                        Abholbereit
-                      </span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'var(--amber-bg)', color: 'var(--amber)', fontWeight: 700 }}>Abholbereit</span>
                     )}
                   </td>
                 </tr>

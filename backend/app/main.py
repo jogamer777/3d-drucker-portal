@@ -71,6 +71,13 @@ def _run_migrations():
         "ALTER TABLE gcode_files ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0",
         # Slicer-Profile Tabelle
         "CREATE TABLE IF NOT EXISTS slicer_profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, description TEXT, printer_id TEXT, slicer_type TEXT NOT NULL, filename_orig TEXT NOT NULL, filepath TEXT NOT NULL, size_bytes INTEGER NOT NULL, uploaded_by_id INTEGER, created_at TEXT)",
+        # Feature B: Filament-Druckparameter
+        "ALTER TABLE filament_types ADD COLUMN print_temp_min INTEGER",
+        "ALTER TABLE filament_types ADD COLUMN print_temp_max INTEGER",
+        "ALTER TABLE filament_types ADD COLUMN bed_temp INTEGER",
+        "ALTER TABLE filament_types ADD COLUMN cooling_percent INTEGER",
+        "ALTER TABLE filament_types ADD COLUMN print_speed_mms INTEGER",
+        "ALTER TABLE filament_types ADD COLUMN notes TEXT",
     ]
     for sql in migrations:
         try:

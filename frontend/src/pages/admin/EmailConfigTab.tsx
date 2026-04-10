@@ -63,98 +63,98 @@ export default function EmailConfigTab() {
     }
   }
 
+  const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: 4 }
+
   const field = (key: keyof EmailConfig, label: string, type = 'text', placeholder = '') => (
     <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <label style={labelStyle}>{label}</label>
       <input
         type={type}
         value={String(form[key])}
         onChange={e => setForm(f => ({ ...f, [key]: type === 'number' ? parseInt(e.target.value) || 0 : e.target.value }))}
         placeholder={placeholder}
-        className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="input-lime"
+        style={{ fontSize: 13 }}
       />
     </div>
   )
 
-  if (loading) return <div className="text-sm text-gray-400 py-8 text-center">Lade Konfiguration...</div>
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>Lade Konfiguration...</div>
 
   return (
-    <div className="max-w-lg space-y-6">
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">E-Mail-Benachrichtigungen</h3>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <span className="text-sm text-gray-600">Aktiviert</span>
+    <div style={{ maxWidth: 520, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: '18px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>E-Mail-Benachrichtigungen</h3>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <span style={{ fontSize: 13, color: 'var(--text2)' }}>Aktiviert</span>
             <div
               onClick={() => setForm(f => ({ ...f, enabled: !f.enabled }))}
-              className={`w-10 h-5 rounded-full transition-colors cursor-pointer ${form.enabled ? 'bg-blue-600' : 'bg-gray-300'}`}
+              style={{ width: 40, height: 22, borderRadius: 11, transition: 'background 0.2s', cursor: 'pointer', background: form.enabled ? 'var(--lime)' : 'var(--border)', position: 'relative' }}
             >
-              <div className={`w-4 h-4 bg-white rounded-full shadow transition-transform mt-0.5 ${form.enabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              <div style={{ position: 'absolute', top: 3, left: form.enabled ? 21 : 3, width: 16, height: 16, background: '#fff', borderRadius: '50%', transition: 'left 0.2s' }} />
             </div>
           </label>
         </div>
 
-        <div className="mb-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-700">
-          <span className="font-medium">Eigener Postfix-Server:</span> Host = <code className="font-mono">localhost</code>, Port = <code className="font-mono">25</code>, kein Benutzername, STARTTLS und SSL deaktivieren.
+        <div style={{ background: 'var(--blue-bg)', border: '0.5px solid var(--blue)', borderRadius: 10, padding: '8px 12px', fontSize: 12, color: 'var(--blue)', marginBottom: 14 }}>
+          <span style={{ fontWeight: 700 }}>Eigener Postfix-Server:</span> Host = <code style={{ fontFamily: 'var(--mono)' }}>localhost</code>, Port = <code style={{ fontFamily: 'var(--mono)' }}>25</code>, kein Benutzername, STARTTLS und SSL deaktivieren.
         </div>
 
-        <div className="space-y-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {field('smtp_host', 'SMTP-Server', 'text', 'localhost')}
           {field('smtp_port', 'SMTP-Port', 'number', '25')}
           {field('smtp_user', 'Benutzername', 'text', 'portal@example.com')}
           {field('smtp_password', 'Passwort (leer = unverändert)', 'password')}
           {field('from_address', 'Absenderadresse', 'email', 'portal@example.com')}
 
-          <div className="flex gap-4 pt-1">
-            <label className="flex items-center gap-2 cursor-pointer">
+          <div style={{ display: 'flex', gap: 20, paddingTop: 4 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
               <input
                 type="checkbox"
                 checked={form.use_tls}
                 onChange={e => setForm(f => ({ ...f, use_tls: e.target.checked }))}
-                className="rounded"
+                style={{ accentColor: 'var(--lime)' }}
               />
-              <span className="text-sm text-gray-600">STARTTLS</span>
+              <span style={{ color: 'var(--text2)' }}>STARTTLS</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
               <input
                 type="checkbox"
                 checked={form.use_ssl}
                 onChange={e => setForm(f => ({ ...f, use_ssl: e.target.checked }))}
-                className="rounded"
+                style={{ accentColor: 'var(--lime)' }}
               />
-              <span className="text-sm text-gray-600">SSL/TLS (Port 465)</span>
+              <span style={{ color: 'var(--text2)' }}>SSL/TLS (Port 465)</span>
             </label>
           </div>
         </div>
 
         {msg && (
-          <div className={`mt-4 text-sm px-3 py-2 rounded-lg ${msg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+          <div style={{ marginTop: 14, fontSize: 13, padding: '8px 12px', borderRadius: 10, background: msg.type === 'success' ? 'var(--emerald-bg)' : 'var(--red-bg)', color: msg.type === 'success' ? 'var(--emerald)' : 'var(--red)' }}>
             {msg.text}
           </div>
         )}
 
-        <div className="flex gap-2 mt-4">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
-          >
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button onClick={save} disabled={saving} className="btn-lime" style={{ padding: '9px 18px', fontSize: 13 }}>
             {saving ? 'Speichern...' : 'Speichern'}
           </button>
           <button
             onClick={test}
             disabled={testing || !form.enabled}
             title={!form.enabled ? 'E-Mail muss aktiviert sein' : ''}
-            className="border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-600 text-sm px-4 py-2 rounded-lg"
+            className="btn-secondary"
+            style={{ padding: '9px 18px', fontSize: 13, opacity: (!form.enabled || testing) ? 0.4 : 1 }}
           >
             {testing ? 'Sende...' : 'Test-Mail senden'}
           </button>
         </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-700">
-        <p className="font-medium mb-1">Was wird benachrichtigt?</p>
-        <ul className="list-disc list-inside space-y-0.5 text-blue-600">
+      <div style={{ background: 'var(--blue-bg)', border: '0.5px solid var(--blue)', borderRadius: 12, padding: '14px 16px', fontSize: 13, color: 'var(--blue)' }}>
+        <p style={{ fontWeight: 700, margin: '0 0 6px' }}>Was wird benachrichtigt?</p>
+        <ul style={{ paddingLeft: 16, margin: 0, lineHeight: 1.8, fontSize: 12, opacity: 0.9 }}>
           <li>Warteschlange: wenn Nutzer an der Reihe ist (5-Min-Fenster)</li>
           <li>Druck fertig: wenn Druck abgeschlossen (24h Abholzeit)</li>
           <li>Aufladeantrag genehmigt/abgelehnt</li>

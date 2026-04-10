@@ -17,10 +17,10 @@ const TYPE_LABELS: Record<string, string> = {
   refund: 'Erstattung',
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  topup: 'bg-green-100 text-green-700',
-  charge: 'bg-red-100 text-red-700',
-  refund: 'bg-blue-100 text-blue-700',
+function typeBadge(type: string) {
+  if (type === 'topup') return { background: 'var(--emerald-bg)', color: 'var(--emerald)' }
+  if (type === 'refund') return { background: 'var(--blue-bg)', color: 'var(--blue)' }
+  return { background: 'var(--red-bg)', color: 'var(--red)' }
 }
 
 export default function TransactionsTab() {
@@ -45,69 +45,56 @@ export default function TransactionsTab() {
 
   const filtered = transactions.filter(t => filter === 'all' || t.type === filter)
 
+  const pillBtn = (active: boolean, onClick: () => void, label: string) => (
+    <button onClick={onClick} style={{ padding: '4px 12px', fontSize: 12, borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: active ? '#111' : 'var(--surface2)', color: active ? '#fff' : 'var(--text2)', fontWeight: active ? 700 : 500 }}>{label}</button>
+  )
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-2 flex-wrap">
-          {([
-            ['all', `Alle (${transactions.length})`],
-            ['topup', `Aufladungen (${transactions.filter(t => t.type === 'topup').length})`],
-            ['charge', `Abbuchungen (${transactions.filter(t => t.type === 'charge').length})`],
-            ['refund', `Erstattungen (${transactions.filter(t => t.type === 'refund').length})`],
-          ] as const).map(([f, label]) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >{label}</button>
-          ))}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {pillBtn(filter === 'all', () => setFilter('all'), `Alle (${transactions.length})`)}
+          {pillBtn(filter === 'topup', () => setFilter('topup'), `Aufladungen (${transactions.filter(t => t.type === 'topup').length})`)}
+          {pillBtn(filter === 'charge', () => setFilter('charge'), `Abbuchungen (${transactions.filter(t => t.type === 'charge').length})`)}
+          {pillBtn(filter === 'refund', () => setFilter('refund'), `Erstattungen (${transactions.filter(t => t.type === 'refund').length})`)}
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => window.open('/api/admin/transactions/export', '_blank')}
-            className="text-sm border border-gray-200 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded-lg"
-          >
-            CSV exportieren
-          </button>
-          <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => window.open('/api/admin/transactions/export', '_blank')} className="btn-secondary" style={{ fontSize: 12, padding: '6px 12px' }}>CSV exportieren</button>
+          <button onClick={load} style={{ fontSize: 12, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Aktualisieren</button>
         </div>
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400">Laden...</p>
+        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Laden...</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">Keine Transaktionen vorhanden.</p>
+        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Keine Transaktionen vorhanden.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200">
-                <th className="pb-2 font-medium">Datum</th>
-                <th className="pb-2 font-medium">Nutzer</th>
-                <th className="pb-2 font-medium">Art</th>
-                <th className="pb-2 font-medium">Betrag</th>
-                <th className="pb-2 font-medium">Beschreibung / Code</th>
+              <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                {['Datum', 'Nutzer', 'Art', 'Betrag', 'Beschreibung / Code'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map(t => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-2 text-gray-500 whitespace-nowrap">{formatDate(t.created_at)}</td>
-                  <td className="py-2 text-gray-800 font-medium">{t.user_email}</td>
-                  <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[t.type]}`}>
+                <tr key={t.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12, whiteSpace: 'nowrap', fontFamily: 'var(--mono)' }}>{formatDate(t.created_at)}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text)' }}>{t.user_email}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, ...typeBadge(t.type) }}>
                       {TYPE_LABELS[t.type]}
                     </span>
                   </td>
-                  <td className={`py-2 font-medium ${t.amount_cents >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  <td style={{ padding: '8px 12px', fontWeight: 700, fontFamily: 'var(--mono)', color: t.amount_cents >= 0 ? 'var(--emerald)' : 'var(--red)', whiteSpace: 'nowrap' }}>
                     {formatAmount(t.amount_cents)}
                   </td>
-                  <td className="py-2 text-gray-600">
+                  <td style={{ padding: '8px 12px', color: 'var(--text2)' }}>
                     {t.description}
                     {t.related_voucher_code && (
-                      <span className="ml-2 font-mono text-xs text-gray-400">({t.related_voucher_code})</span>
+                      <span style={{ marginLeft: 8, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)' }}>({t.related_voucher_code})</span>
                     )}
                   </td>
                 </tr>

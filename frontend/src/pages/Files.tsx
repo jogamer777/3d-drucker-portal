@@ -27,10 +27,8 @@ const formatBytes = (b: number) => {
 
 const formatDuration = (s: number | null) => {
   if (!s) return null
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 const totalFilament = (usage: Record<string, number> | null) => {
@@ -39,7 +37,7 @@ const totalFilament = (usage: Record<string, number> | null) => {
 }
 
 const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })
 
 export default function Files() {
   useAuthStore()
@@ -87,22 +85,16 @@ export default function Files() {
       setError('Nur .gcode und .gco Dateien erlaubt.')
       return
     }
-
     const formData = new FormData()
     formData.append('file', file)
     setUploading(true)
     setUploadProgress(0)
-
     try {
       await api.post('/files/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: e => {
-          if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100))
-        },
+        onUploadProgress: e => { if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100)) },
       })
       await load()
-
-      // Storage-Info aktualisieren
       const me = await api.get('/user/me')
       useAuthStore.setState(s => ({ ...s, user: me.data }))
     } catch (e: any) {
@@ -135,157 +127,136 @@ export default function Files() {
     setDeleteId(null)
   }
 
-  const storagePercent = storage
-    ? Math.min(100, (storage.used_bytes / storage.limit_bytes) * 100)
-    : 0
+  const storagePercent = storage ? Math.min(100, (storage.used_bytes / storage.limit_bytes) * 100) : 0
+  const storageColor = storagePercent > 90 ? 'var(--red)' : storagePercent > 70 ? 'var(--amber)' : 'var(--lime)'
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Meine Dateien</h1>
-          <p className="text-sm text-gray-500 mt-0.5">G-Code hochladen und verwalten</p>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.04em', margin: 0 }}>Meine Dateien</h1>
+          {storage && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: 'var(--text3)' }}>Speicher</span>
+                <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                  {formatBytes(storage.used_bytes)} / {formatBytes(storage.limit_bytes)}
+                </span>
+              </div>
+              <div style={{ background: 'var(--surface2)', borderRadius: 4, height: 5, overflow: 'hidden', maxWidth: 300 }}>
+                <div style={{ width: `${storagePercent}%`, height: '100%', background: storageColor, transition: 'width 0.5s' }} />
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2">
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <button
-            onClick={() => {
-              const next = !favoritesOnly
-              setFavoritesOnly(next)
-              load(next)
-            }}
-            className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-              favoritesOnly
-                ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-                : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
+            onClick={() => { const next = !favoritesOnly; setFavoritesOnly(next); load(next) }}
+            style={{
+              padding: '8px 12px', fontSize: 13, borderRadius: 9, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+              border: favoritesOnly ? '1.5px solid var(--amber)' : '0.5px solid var(--border)',
+              background: favoritesOnly ? 'var(--amber-bg)' : 'transparent',
+              color: favoritesOnly ? 'var(--amber)' : 'var(--text2)',
+            }}>
             {favoritesOnly ? '★ Favoriten' : '☆ Favoriten'}
           </button>
-          <button
-            onClick={() => inputRef.current?.click()}
-            disabled={uploading}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-          >
-            <span>↑</span> Datei hochladen
+          <button onClick={() => inputRef.current?.click()} disabled={uploading} className="btn-lime" style={{ padding: '8px 16px', fontSize: 13 }}>
+            ↑ Hochladen
           </button>
         </div>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".gcode,.gco"
-          onChange={handleFileInput}
-          className="hidden"
-        />
+        <input ref={inputRef} type="file" accept=".gcode,.gco" onChange={handleFileInput} className="hidden" />
       </div>
 
-      {/* Speicher-Anzeige */}
-      {storage && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-gray-700">Speicher</p>
-            <p className="text-sm text-gray-500">
-              {formatBytes(storage.used_bytes)} / {formatBytes(storage.limit_bytes)}
-            </p>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all ${
-                storagePercent > 90 ? 'bg-red-500' : storagePercent > 70 ? 'bg-orange-400' : 'bg-blue-500'
-              }`}
-              style={{ width: `${storagePercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-400 mt-1">{storagePercent.toFixed(0)}% belegt</p>
-        </div>
-      )}
-
-      {/* Upload-Fortschritt */}
+      {/* Upload progress */}
       {uploading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium text-blue-700">Wird hochgeladen & analysiert...</p>
-            <p className="text-sm text-blue-600">{uploadProgress}%</p>
+        <div style={{ background: 'var(--lime-bg)', border: '0.5px solid var(--lime)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Wird hochgeladen & analysiert...</span>
+            <span style={{ fontSize: 13, fontFamily: 'var(--mono)' }}>{uploadProgress}%</span>
           </div>
-          <div className="w-full bg-blue-100 rounded-full h-1.5">
-            <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
+          <div style={{ background: 'rgba(0,0,0,0.1)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+            <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--lime-dark)', transition: 'width 0.2s' }} />
           </div>
         </div>
       )}
 
-      {/* Fehler */}
+      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">
+        <div style={{ background: 'var(--red-bg)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: 'var(--red)', marginBottom: 12 }}>
           {error}
         </div>
       )}
 
-      {/* Drag & Drop Zone (wenn keine Dateien) */}
+      {/* Empty drop zone */}
       {files.length === 0 && !loading && (
         <div
           onDragOver={e => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => inputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors ${
-            dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-          }`}
+          style={{
+            borderRadius: 14, border: dragOver ? '2px dashed var(--lime-dark)' : '2px dashed var(--border)',
+            background: dragOver ? 'var(--lime-bg)' : 'transparent',
+            padding: '48px 24px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s',
+          }}
         >
-          <p className="text-4xl mb-3">📁</p>
-          <p className="text-gray-600 font-medium">G-Code hier ablegen oder klicken</p>
-          <p className="text-sm text-gray-400 mt-1">.gcode und .gco Dateien, max. 500 MB</p>
+          <svg style={{ margin: '0 auto 10px', display: 'block' }} width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+          <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text2)', margin: '0 0 4px' }}>G-Code hier ablegen oder klicken</p>
+          <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>.gcode und .gco, max. 500 MB</p>
         </div>
       )}
 
-      {/* Dateiliste */}
+      {/* File list */}
       {loading ? (
-        <p className="text-sm text-gray-400">Laden...</p>
+        <p style={{ color: 'var(--text3)', fontSize: 13 }}>Laden...</p>
       ) : (
         <div
           onDragOver={e => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          className={`space-y-3 ${dragOver ? 'ring-2 ring-blue-400 ring-offset-2 rounded-xl' : ''}`}
+          style={{ display: 'flex', flexDirection: 'column', gap: 8, outline: dragOver ? '2px solid var(--lime)' : 'none', borderRadius: 14 }}
         >
           {files.map(f => {
             const dur = formatDuration(f.duration_seconds)
             const filG = totalFilament(f.filament_usage)
             return (
-              <div key={f.id} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 hover:shadow-sm transition-shadow">
+              <div key={f.id} style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'center' }}>
                 {/* Thumbnail */}
-                <div className="w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 flex items-center justify-center">
+                <div style={{ width: 48, height: 48, flexShrink: 0, borderRadius: 9, overflow: 'hidden', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {f.thumbnail_b64 ? (
-                    <img src={f.thumbnail_b64} alt="" className="w-full h-full object-cover" />
+                    <img src={f.thumbnail_b64} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <span className="text-2xl">📄</span>
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--text3)" strokeWidth="1.5"><rect x="4" y="2" width="12" height="16" rx="2" /><path d="M8 6h4M8 9h4M8 12h2" /></svg>
                   )}
                 </div>
 
                 {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium text-gray-900 truncate">{f.filename}</p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</p>
                     {f.profile_signature ? (
-                      <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'var(--emerald-bg)', color: 'var(--emerald)', fontWeight: 700, flexShrink: 0 }}>
                         ✓ {f.profile_signature}
                       </span>
                     ) : (
-                      <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">
-                        ⚠ Kein Profil
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'var(--amber-bg)', color: 'var(--amber)', fontWeight: 700, flexShrink: 0 }}>
+                        Kein Profil
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0, fontFamily: 'var(--mono)' }}>
                     {formatBytes(f.size_bytes)}
                     {dur && <> · {dur}</>}
                     {filG && <> · {filG} g</>}
                     {' · '}{formatDate(f.uploaded_at)}
                   </p>
-
-                  {/* Filament-Aufschlüsselung */}
                   {f.filament_usage && Object.keys(f.filament_usage).length > 1 && (
-                    <div className="flex flex-wrap gap-2 mt-1">
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
                       {Object.entries(f.filament_usage).map(([slot, g]) => (
-                        <span key={slot} className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                        <span key={slot} style={{ fontSize: 10, background: 'var(--surface2)', color: 'var(--text2)', padding: '1px 6px', borderRadius: 4, fontFamily: 'var(--mono)' }}>
                           {slot}: {g}g
                         </span>
                       ))}
@@ -293,31 +264,34 @@ export default function Files() {
                   )}
                 </div>
 
-                {/* Aktionen */}
-                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                {/* Actions */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
                   <button
                     onClick={() => toggleFavorite(f)}
-                    className={`text-xs px-3 py-1.5 rounded border text-center transition-colors ${
-                      f.is_favorite
-                        ? 'bg-yellow-50 border-yellow-300 text-yellow-600'
-                        : 'border-gray-200 text-gray-400 hover:bg-yellow-50 hover:border-yellow-200 hover:text-yellow-500'
-                    }`}
-                    title={f.is_favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+                    title={f.is_favorite ? 'Aus Favoriten entfernen' : 'Zu Favoriten'}
+                    style={{
+                      width: 30, height: 30, borderRadius: 7, border: f.is_favorite ? '1.5px solid var(--amber)' : '0.5px solid var(--border)',
+                      background: f.is_favorite ? 'var(--amber-bg)' : 'transparent',
+                      color: f.is_favorite ? 'var(--amber)' : 'var(--text3)',
+                      fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
                   >
                     {f.is_favorite ? '★' : '☆'}
                   </button>
                   <a
                     href={`/api/files/${f.id}/download`}
                     download={f.filename}
-                    className="text-xs px-3 py-1.5 rounded border border-blue-300 text-blue-700 hover:bg-blue-50 text-center"
+                    style={{ width: 30, height: 30, borderRadius: 7, border: '0.5px solid var(--blue)', color: 'var(--blue)', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+                    title="Herunterladen"
                   >
-                    ↓ Download
+                    ↓
                   </a>
                   <button
                     onClick={() => setDeleteId(f.id)}
-                    className="text-xs px-3 py-1.5 rounded border border-red-200 text-red-600 hover:bg-red-50"
+                    style={{ width: 30, height: 30, borderRadius: 7, border: '0.5px solid var(--red-bg)', color: 'var(--red)', fontSize: 14, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Löschen"
                   >
-                    Löschen
+                    ×
                   </button>
                 </div>
               </div>
@@ -326,25 +300,18 @@ export default function Files() {
         </div>
       )}
 
-      {/* Löschen-Modal */}
+      {/* Delete modal */}
       {deleteId !== null && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">Datei löschen</h3>
-            <p className="text-sm text-gray-600 mb-5">
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '0 16px' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, border: '0.5px solid var(--border)' }}>
+            <h3 style={{ fontWeight: 800, fontSize: 15, margin: '0 0 8px' }}>Datei löschen?</h3>
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 18px' }}>
               {files.find(f => f.id === deleteId)?.filename} – wirklich löschen?
             </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm"
-              >
-                Abbrechen
-              </button>
-              <button
-                onClick={() => deleteFile(deleteId)}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-medium"
-              >
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteId(null)} className="btn-secondary" style={{ flex: 1, padding: '10px', fontSize: 14 }}>Abbrechen</button>
+              <button onClick={() => deleteFile(deleteId)}
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', fontWeight: 800, fontSize: 14, borderRadius: 10, border: 'none', padding: '10px', cursor: 'pointer', fontFamily: 'inherit' }}>
                 Löschen
               </button>
             </div>

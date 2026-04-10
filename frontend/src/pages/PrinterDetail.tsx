@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 import GCodeLayerPreview from '../components/GCodeLayerPreview'
+import StatusDot from '../components/StatusDot'
 
 interface OccupationInfo {
   id: number
@@ -15,15 +16,6 @@ interface OccupationInfo {
   file_id?: number | null
   estimated_cost_cents?: number | null
   charged_cost_cents?: number | null
-}
-
-interface GCodeFileInfo {
-  id: number
-  filename: string
-  duration_seconds: number | null
-  filament_usage: string | null
-  thumbnail_b64: string | null
-  size_bytes: number
 }
 
 interface QueueInfo {
@@ -68,6 +60,12 @@ interface SlotInfo {
   remaining_weight_g: number | null
   initial_weight_g: number | null
   low_spool: boolean
+  print_temp_min?: number | null
+  print_temp_max?: number | null
+  bed_temp?: number | null
+  cooling_percent?: number | null
+  print_speed_mms?: number | null
+  notes?: string | null
 }
 
 interface SlicerProfileInfo {
@@ -80,48 +78,18 @@ interface SlicerProfileInfo {
 }
 
 const SLICER_LABELS: Record<string, string> = {
-  orca: 'OrcaSlicer', prusa: 'PrusaSlicer', cura: 'Cura', bambu: 'Bambu Studio', other: 'Sonstiger',
+  orca: 'OrcaSlicer', prusa: 'PrusaSlicer', cura: 'Cura',
+  bambu: 'Bambu Studio', creality: 'Creality Print', other: 'Sonstiger',
 }
 
-const STATE_CONFIG: Record<string, { label: string; dot: string; text: string }> = {
-  idle:          { label: 'Bereit',            dot: 'bg-green-500',  text: 'text-green-700' },
-  printing:      { label: 'Druckt',            dot: 'bg-blue-500',   text: 'text-blue-700' },
-  paused:        { label: 'Pausiert',          dot: 'bg-yellow-500', text: 'text-yellow-700' },
-  error:         { label: 'Fehler',            dot: 'bg-red-500',    text: 'text-red-700' },
-  complete:      { label: 'Druck fertig',      dot: 'bg-green-400',  text: 'text-green-600' },
-  offline:       { label: 'Offline',           dot: 'bg-gray-400',   text: 'text-gray-500' },
-  pending_setup: { label: 'Einrichtung läuft', dot: 'bg-gray-300',   text: 'text-gray-500' },
-}
-
-const RATE_PER_HOUR_CENTS = 20
-const RATE_PER_GRAM_CENTS = 5
-
-const PRINTER_MAX_DURATION_SECONDS: Record<string, number> = {
-  k2:  172800,  // 48h
-  crx: 345600,  // 96h
-}
-
-function parseFilamentGrams(s: string | null): number {
-  if (!s) return 0
-  try {
-    const d = JSON.parse(s)
-    return Object.entries(d)
-      .filter(([k]) => k !== 'flush')
-      .reduce((sum, [, v]) => sum + (typeof v === 'number' ? v : 0), 0)
-  } catch { return 0 }
-}
-
-function estimateCost(dur: number | null, grams: number): number {
-  let cost = 0
-  if (dur && dur > 0) cost += Math.floor((dur / 3600) * RATE_PER_HOUR_CENTS)
-  cost += Math.floor(grams * RATE_PER_GRAM_CENTS)
-  return cost
-}
-
-function formatDuration(sec: number | null): string {
-  if (!sec || sec <= 0) return '—'
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60)
-  return h > 0 ? `${h} Std. ${m} Min.` : `${m} Min.`
+const STATE_CONFIG: Record<string, { label: string }> = {
+  idle:          { label: 'Bereit'           },
+  printing:      { label: 'Druckt'           },
+  paused:        { label: 'Pausiert'         },
+  error:         { label: 'Fehler'           },
+  complete:      { label: 'Druck fertig'     },
+  offline:       { label: 'Offline'          },
+  pending_setup: { label: 'Einrichtung'      },
 }
 
 const formatTime = (s: number) => {
@@ -160,239 +128,110 @@ function useEtaCountdown(unixTs: number | null): number {
   return secs
 }
 
-
-// ── Start Print Modal ──────────────────────────────────────────────────────────
-function StartPrintModal({
-  printerId,
-  userBalanceCents,
-  onClose,
-  onStarted,
-  isAdmin,
-}: {
-  printerId: string
-  userBalanceCents: number
-  onClose: () => void
-  onStarted: () => void
-  isAdmin: boolean
-}) {
-  const [files, setFiles] = useState<GCodeFileInfo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState<GCodeFileInfo | null>(null)
-  const [starting, setStarting] = useState(false)
-  const [error, setError] = useState('')
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [tempHotend, setTempHotend] = useState('')
-  const [tempBed, setTempBed] = useState('')
-  const [speedPercent, setSpeedPercent] = useState('')
-  const [flowPercent, setFlowPercent] = useState('')
-
-  const maxDuration = PRINTER_MAX_DURATION_SECONDS[printerId]
-  const exceedsDurationLimit = !!(selected?.duration_seconds && maxDuration && selected.duration_seconds > maxDuration)
-
-  useEffect(() => {
-    api.get('/files').then(r => setFiles(r.data)).catch(() => setError('Dateien konnten nicht geladen werden.')).finally(() => setLoading(false))
-  }, [])
-
-  const doStart = async () => {
-    if (!selected) return
-    setStarting(true)
-    setError('')
-    try {
-      const body: Record<string, unknown> = { file_id: selected.id }
-      if (isAdmin && showAdvanced) {
-        if (tempHotend) body.temp_hotend = parseInt(tempHotend)
-        if (tempBed) body.temp_bed = parseInt(tempBed)
-        if (speedPercent) body.speed_percent = parseInt(speedPercent)
-        if (flowPercent) body.flow_percent = parseInt(flowPercent)
-      }
-      await api.post(`/printers/${printerId}/start`, body)
-      onStarted()
-    } catch (e: any) {
-      const detail = e.response?.data?.detail ?? 'Fehler beim Starten'
-      setError(detail)
-    } finally {
-      setStarting(false)
-    }
-  }
-
-  const selectedGrams = selected ? parseFilamentGrams(selected.filament_usage) : 0
-  const selectedCost = selected ? estimateCost(selected.duration_seconds, selectedGrams) : 0
-  const canAfford = userBalanceCents >= selectedCost
-
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-lg w-full shadow-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">Druck starten</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
-        </div>
-
-        {loading && <div className="p-6 text-center text-sm text-gray-400">Lade Dateien...</div>}
-        {!loading && files.length === 0 && (
-          <div className="p-6 text-center text-sm text-gray-500">
-            Keine G-Code-Dateien vorhanden.<br />
-            <a href="/dateien" className="text-blue-600 hover:underline text-xs mt-1 inline-block">Dateien hochladen →</a>
-          </div>
-        )}
-
-        {!loading && files.length > 0 && (
-          <div className="overflow-y-auto flex-1 divide-y divide-gray-100">
-            {files.map(f => {
-              const grams = parseFilamentGrams(f.filament_usage)
-              const cost = estimateCost(f.duration_seconds, grams)
-              const isSelected = selected?.id === f.id
-              return (
-                <button
-                  key={f.id}
-                  onClick={() => setSelected(isSelected ? null : f)}
-                  className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50 border-l-2 border-blue-500' : ''}`}
-                >
-                  {f.thumbnail_b64 ? (
-                    <img src={f.thumbnail_b64} alt="" className="w-12 h-12 object-cover rounded shrink-0 border border-gray-200" />
-                  ) : (
-                    <div className="w-12 h-12 bg-gray-100 rounded shrink-0 flex items-center justify-center text-gray-300 text-xl">◻</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{f.filename}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {formatDuration(f.duration_seconds)}
-                      {grams > 0 && <span> · {grams.toFixed(1)} g</span>}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-semibold ${cost === 0 ? 'text-green-600' : 'text-gray-800'}`}>
-                      {cost === 0 ? 'kostenlos' : `${(cost / 100).toFixed(2)} €`}
-                    </p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Power-User Einstellungen */}
-        {isAdmin && (
-          <div className="px-5 border-t border-gray-100 pt-3">
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-            >
-              <span>{showAdvanced ? '▾' : '▸'}</span>
-              Erweiterte Einstellungen (Power-User)
-            </button>
-            {showAdvanced && (
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-xs text-gray-500">Hotend-Temp. (°C)</span>
-                  <input
-                    type="number" min={150} max={300} value={tempHotend}
-                    onChange={e => setTempHotend(e.target.value)}
-                    placeholder="Standard"
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-gray-500">Bett-Temp. (°C)</span>
-                  <input
-                    type="number" min={0} max={120} value={tempBed}
-                    onChange={e => setTempBed(e.target.value)}
-                    placeholder="Standard"
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-gray-500">Geschwindigkeit (%)</span>
-                  <input
-                    type="number" min={50} max={200} value={speedPercent}
-                    onChange={e => setSpeedPercent(e.target.value)}
-                    placeholder="100"
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-gray-500">Fluss (%)</span>
-                  <input
-                    type="number" min={50} max={150} value={flowPercent}
-                    onChange={e => setFlowPercent(e.target.value)}
-                    placeholder="100"
-                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="px-5 py-4 border-t border-gray-100 space-y-3">
-          {selected && (
-            <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs space-y-1">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Ausgewählt:</span>
-                <span className="font-medium text-gray-900 truncate max-w-[200px]">{selected.filename}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Kosten:</span>
-                <span className="font-medium text-gray-900">{selectedCost === 0 ? 'kostenlos' : `${(selectedCost / 100).toFixed(2)} €`}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Guthaben danach:</span>
-                <span className={`font-medium ${canAfford ? 'text-gray-900' : 'text-red-600'}`}>
-                  {((userBalanceCents - selectedCost) / 100).toFixed(2)} €
-                </span>
-              </div>
-            </div>
-          )}
-
-          {selected && !canAfford && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800">
-              Guthaben zu gering. Bitte Gutschein einlösen.
-            </div>
-          )}
-
-          {exceedsDurationLimit && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800">
-              Druck zu lang: {selected?.duration_seconds ? (selected.duration_seconds / 3600).toFixed(1) : '?'}h geschätzt –
-              maximal {maxDuration ? maxDuration / 3600 : '?'}h für diesen Drucker erlaubt.
-            </div>
-          )}
-
-          {error && <p className="text-xs text-red-600">{error}</p>}
-
-          <button
-            onClick={doStart}
-            disabled={!selected || starting || !canAfford || exceedsDurationLimit}
-            className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
-          >
-            {starting ? 'Startet...' : 'Druck starten'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Webcam Komponente (MJPEG) ─────────────────────────────────────────────────
 function WebcamView({ src, name }: { src: string; name: string }) {
   const [error, setError] = useState(false)
   if (error) return (
-    <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
-      <p className="text-sm text-gray-400">Webcam nicht verfügbar</p>
+    <div style={{ background: '#111', aspectRatio: '16/9', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <p style={{ color: 'var(--text3)', fontSize: 13 }}>Webcam nicht verfügbar</p>
     </div>
   )
   return (
-    <div className="bg-black aspect-video w-full overflow-hidden">
-      <img
-        src={src}
-        alt={`${name} Webcam`}
-        className="w-full h-full object-contain"
-        onError={() => setError(true)}
-      />
+    <div style={{ background: '#000', aspectRatio: '16/9', width: '100%', overflow: 'hidden' }}>
+      <img src={src} alt={`${name} Webcam`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={() => setError(true)} />
     </div>
   )
 }
 
-// ── Hauptseite ─────────────────────────────────────────────────────────────────
+function SlotCard({ s }: { s: SlotInfo }) {
+  const [expanded, setExpanded] = useState(false)
+  const pct = s.remaining_weight_g != null && s.initial_weight_g
+    ? Math.max(0, Math.min(100, (s.remaining_weight_g / s.initial_weight_g) * 100))
+    : null
+  const barColor = pct == null ? 'var(--border)' : pct > 25 ? 'var(--emerald)' : pct > 10 ? 'var(--amber)' : 'var(--red)'
+
+  const hasParams = s.print_temp_min || s.print_temp_max || s.bed_temp || s.cooling_percent || s.print_speed_mms || s.notes
+
+  return (
+    <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        {s.color_hex ? (
+          <div style={{ width: 16, height: 16, borderRadius: 4, background: s.color_hex, border: '0.5px solid var(--border)', flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 16, height: 16, borderRadius: 4, background: 'var(--border)', flexShrink: 0 }} />
+        )}
+        <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{s.filament_name}</p>
+        {s.material && (
+          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600, flexShrink: 0 }}>{s.material}</span>
+        )}
+        {s.low_spool && (
+          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--red-bg)', color: 'var(--red)', fontWeight: 600, flexShrink: 0 }}>Wenig</span>
+        )}
+        <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 'auto', flexShrink: 0 }}>#{s.slot_index + 1}</span>
+      </div>
+
+      {pct != null && (
+        <div style={{ marginBottom: s.remaining_weight_g != null ? 4 : 0 }}>
+          <div style={{ background: 'var(--border)', borderRadius: 3, height: 4, overflow: 'hidden' }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: barColor, transition: 'width 0.5s' }} />
+          </div>
+          {s.remaining_weight_g != null && (
+            <p style={{ fontSize: 11, color: 'var(--text3)', margin: '3px 0 0', fontFamily: 'var(--mono)' }}>
+              {s.remaining_weight_g} g
+            </p>
+          )}
+        </div>
+      )}
+
+      {hasParams && (
+        <>
+          <button
+            onClick={() => setExpanded(e => !e)}
+            style={{ fontSize: 11, color: 'var(--text2)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0 0', fontFamily: 'inherit', fontWeight: 600 }}
+          >
+            {expanded ? '▾' : '▸'} Parameter anzeigen
+          </button>
+          {expanded && (
+            <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {(s.print_temp_min || s.print_temp_max) && (
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 8px' }}>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', margin: '0 0 1px' }}>Drucktemp.</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--mono)', margin: 0 }}>
+                    {s.print_temp_min ?? '?'}–{s.print_temp_max ?? '?'} °C
+                  </p>
+                </div>
+              )}
+              {s.bed_temp && (
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 8px' }}>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', margin: '0 0 1px' }}>Betttemp.</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--mono)', margin: 0 }}>{s.bed_temp} °C</p>
+                </div>
+              )}
+              {s.cooling_percent != null && (
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 8px' }}>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', margin: '0 0 1px' }}>Kühlung</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--mono)', margin: 0 }}>{s.cooling_percent}%</p>
+                </div>
+              )}
+              {s.print_speed_mms != null && (
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 8px' }}>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', margin: '0 0 1px' }}>Geschw.</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, fontFamily: 'var(--mono)', margin: 0 }}>{s.print_speed_mms} mm/s</p>
+                </div>
+              )}
+              {s.notes && (
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 8px', gridColumn: 'span 2' }}>
+                  <p style={{ fontSize: 10, color: 'var(--text3)', margin: '0 0 1px' }}>Notizen</p>
+                  <p style={{ fontSize: 11, color: 'var(--text2)', margin: 0 }}>{s.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function PrinterDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -406,7 +245,6 @@ export default function PrinterDetail() {
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
   const [refundCents, setRefundCents] = useState<number | null>(null)
-  const [showStartModal, setShowStartModal] = useState(false)
   const [lastMaintenance, setLastMaintenance] = useState<{ action: string; notes: string | null; created_at: string } | null>(null)
   const [slots, setSlots] = useState<SlotInfo[]>([])
   const [slicerProfiles, setSlicerProfiles] = useState<SlicerProfileInfo[]>([])
@@ -425,13 +263,10 @@ export default function PrinterDetail() {
   useEffect(() => {
     load()
     intervalRef.current = setInterval(load, 3_000)
-    // Letzte Wartung einmalig laden
     api.get(`/printers/${id}/maintenance/last`).then(r => setLastMaintenance(r.data)).catch(() => {})
-    // Filament-Slots laden
     api.get('/filament/slots').then(r => {
       setSlots((r.data as SlotInfo[]).filter(s => s.printer_id === id))
     }).catch(() => {})
-    // Slicer-Profile laden
     api.get('/slicer-profiles').then(r => {
       setSlicerProfiles((r.data as SlicerProfileInfo[]).filter(p => !p.printer_id || p.printer_id === id))
     }).catch(() => {})
@@ -462,14 +297,12 @@ export default function PrinterDetail() {
   const acknowledge = () => doAction(() => api.post(`/queue/${id}/acknowledge`))
 
   if (loading) return (
-    <div className="text-sm text-gray-400 py-12 text-center">Verbinde mit Drucker...</div>
+    <p style={{ color: 'var(--text3)', fontSize: 14, textAlign: 'center', padding: '48px 0' }}>Verbinde mit Drucker...</p>
   )
   if (notFound) return (
-    <div className="text-center py-12">
-      <p className="text-gray-500">Drucker nicht gefunden.</p>
-      <button onClick={() => navigate('/drucker')} className="mt-4 text-sm text-blue-600 hover:underline">
-        Zurück zur Übersicht
-      </button>
+    <div style={{ textAlign: 'center', padding: '48px 0' }}>
+      <p style={{ color: 'var(--text2)', marginBottom: 12 }}>Drucker nicht gefunden.</p>
+      <Link to="/" style={{ fontSize: 13, color: 'var(--lime-dark)', fontWeight: 700 }}>← Zum Dashboard</Link>
     </div>
   )
   if (!printer) return null
@@ -487,7 +320,6 @@ export default function PrinterDetail() {
   const canClaimAfterNotified = notified && !p.occupation
   const canQueue = ((!!p.occupation && !p.occupation.is_mine) || p.external_print) && !p.my_queue
 
-  // ETA Anzeige
   let etaTimeStr: string | null = null
   if (p.estimated_end_time) {
     const eta = new Date(p.estimated_end_time * 1000)
@@ -497,417 +329,340 @@ export default function PrinterDetail() {
   const filamentM = p.filament_used_mm > 0 ? (p.filament_used_mm / 1000).toFixed(2) : null
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <button
-        onClick={() => navigate('/drucker')}
-        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-4"
-      >
-        ← Zurück zur Übersicht
-      </button>
+    <div>
+      {/* Breadcrumb */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <Link to="/" style={{ color: 'var(--text2)', textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>← Dashboard</Link>
+        <span style={{ color: 'var(--border)' }}>/</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
+      </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* 2-column layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 14, alignItems: 'start' }}
+           className="grid-cols-1 md:grid-cols-[1fr_360px]">
 
-        {/* Externer Druck Banner */}
-        {p.external_print && (
-          <div className="bg-orange-50 border-b border-orange-200 px-5 py-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚠️</span>
-              <p className="text-sm font-semibold text-orange-800">Außerhalb Portal gestartet</p>
-            </div>
-            <p className="text-xs text-orange-600 mt-1">
-              Dieser Druck wurde nicht über das Portal gestartet und ist keinem Nutzer zugeordnet.
-            </p>
-          </div>
-        )}
+        {/* LEFT: Webcam + progress + details */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* "Du bist dran!" Banner */}
-        {notified && (
-          <div className="bg-blue-50 border-b border-blue-200 px-5 py-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🔔</span>
-              <p className="text-sm font-semibold text-blue-800">Du bist dran!</p>
-            </div>
-            <p className="text-xs text-blue-600">Du hast 5 Minuten um den Drucker zu beanspruchen.</p>
-            <div className="flex gap-2">
-              {canClaimAfterNotified && (
-                <button onClick={claim} disabled={actionLoading}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg">
-                  Drucker beanspruchen
-                </button>
-              )}
-              <button onClick={acknowledge} disabled={actionLoading}
-                className="text-xs text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-200 rounded-lg">
-                Überspringen
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Abholen-Banner */}
-        {iAmAwaiting && (
-          <div className="bg-yellow-50 border-b border-yellow-200 px-5 py-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">📦</span>
-                <p className="text-sm font-semibold text-yellow-800">Druck fertig – bitte abholen!</p>
-              </div>
-              {pickupSecs > 0 && (
-                <span className="text-sm font-mono text-yellow-700">{formatCountdownHM(pickupSecs)}</span>
-              )}
-            </div>
-            <button onClick={release} disabled={actionLoading}
-              className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg">
-              Drucker freigeben (Druck abgeholt)
-            </button>
-          </div>
-        )}
-
-        {/* Header */}
-        <div className="px-5 pt-5 pb-3 flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">{p.name}</h1>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-              <span className={`text-sm font-medium ${cfg.text}`}>{cfg.label}</span>
-              {iAmOccupying && !iAmAwaiting && (
-                <span className="ml-1 text-sm text-blue-600 font-medium">· Du benutzt diesen Drucker</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Webcam – MJPEG via go2rtc */}
-        {p.webcam_path && p.online && p.state !== 'pending_setup' && (
-          <WebcamView src={p.webcam_path} name={p.name} />
-        )}
-        {!p.webcam_path && p.online && p.state !== 'pending_setup' && (
-          <div className="bg-gray-100 aspect-video w-full flex items-center justify-center">
-            <p className="text-sm text-gray-400">Kein Webcam konfiguriert</p>
-          </div>
-        )}
-
-        <div className="px-5 py-5 space-y-4">
-
-          {/* Fortschritt + ETA */}
-          {showProgress && (
-            <div>
-              {p.occupation && !p.occupation.is_mine && (
-                <p className="text-sm text-gray-600 mb-2">
-                  Druckt für: <span className="font-medium text-gray-900">
-                    {isAdmin ? p.occupation.user_email : p.occupation.user_display}
-                  </span>
+          {/* Webcam card */}
+          <div style={{ borderRadius: 16, overflow: 'hidden', border: '0.5px solid var(--border)', background: '#111', position: 'relative' }}>
+            {p.webcam_path && p.online && p.state !== 'pending_setup' ? (
+              <>
+                <WebcamView src={p.webcam_path} name={p.name} />
+                {showProgress && (
+                  <>
+                    {/* Percent overlay */}
+                    <div style={{ position: 'absolute', bottom: 16, right: 16 }}>
+                      <span style={{ fontSize: 48, fontWeight: 900, color: 'var(--lime)', lineHeight: 1, fontFamily: 'var(--mono)' }}>
+                        {pct}%
+                      </span>
+                    </div>
+                    {/* LIVE badge */}
+                    <div style={{ position: 'absolute', top: 12, right: 12, background: 'var(--red)', color: '#fff', borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span className="live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
+                      LIVE
+                    </div>
+                    {/* Progress bar */}
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, background: 'rgba(255,255,255,0.2)' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: 'var(--lime)', transition: 'width 1s' }} />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div style={{ background: '#111', aspectRatio: '16/9', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg width="32" height="32" viewBox="0 0 20 20" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.2"><rect x="2" y="4" width="16" height="12" rx="2" /><circle cx="10" cy="10" r="3" /></svg>
+                <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: 12 }}>
+                  {!p.online ? 'Offline' : 'Kein Webcam'}
                 </p>
-              )}
-              {p.external_print && (
-                <p className="text-sm text-gray-600 mb-2">Außerhalb Portal gestartet</p>
-              )}
+              </div>
+            )}
+          </div>
 
-              <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
-                <span className="text-base font-semibold text-gray-900">{pct}%</span>
-                <div className="text-right">
-                  {etaTimeStr && (
-                    <span className="font-medium text-gray-800">Fertig um {etaTimeStr}</span>
-                  )}
-                  {etaSecs > 0 && (
-                    <span className="text-gray-400 ml-1">(noch {formatCountdownHM(etaSecs)})</span>
-                  )}
+          {/* Progress bar (non-webcam view) */}
+          {showProgress && !p.webcam_path && (
+            <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: '14px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-0.04em', fontFamily: 'var(--mono)' }}>{pct}%</span>
+                <div style={{ textAlign: 'right' }}>
+                  {etaTimeStr && <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>Fertig um {etaTimeStr}</p>}
+                  {etaSecs > 0 && <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0, fontFamily: 'var(--mono)' }}>noch {formatCountdownHM(etaSecs)}</p>}
                 </div>
               </div>
-              <div className="w-full bg-gray-100 rounded-full h-3">
-                <div className="bg-blue-500 h-3 rounded-full transition-all duration-1000" style={{ width: `${pct}%` }} />
+              <div style={{ background: 'var(--surface2)', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: 'var(--lime)', transition: 'width 1s' }} />
               </div>
             </div>
           )}
 
-          {/* Admin/Owner-Controls */}
+          {/* ETA (webcam view) */}
+          {showProgress && p.webcam_path && (etaTimeStr || etaSecs > 0) && (
+            <div style={{ background: '#fff', borderRadius: 12, border: '0.5px solid var(--border)', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {etaTimeStr && <span style={{ fontSize: 13, fontWeight: 700 }}>Fertig um {etaTimeStr}</span>}
+              {etaSecs > 0 && <span style={{ fontSize: 13, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>noch {formatCountdownHM(etaSecs)}</span>}
+            </div>
+          )}
+
+          {/* Stats grid (only for Admin/Owner) */}
+          {canSeeDetails && (showProgress || p.state === 'complete') && (
+            <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: 14 }}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Druckdetails</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {[
+                  { label: 'Hotend', val: `${p.temp_hotend}°C${p.temp_hotend_target > 0 ? ` / ${p.temp_hotend_target}°C` : ''}` },
+                  { label: 'Bett', val: `${p.temp_bed}°C${p.temp_bed_target > 0 ? ` / ${p.temp_bed_target}°C` : ''}` },
+                  ...(p.layer != null && p.layer_count != null ? [{ label: 'Layer', val: `${p.layer} / ${p.layer_count}` }] : []),
+                  ...(p.z_pos > 0 ? [{ label: 'Z-Pos', val: `${p.z_pos} mm` }] : []),
+                  ...(filamentM ? [{ label: 'Filament', val: `${filamentM} m${p.filament_type ? ` · ${p.filament_type}` : ''}` }] : []),
+                  ...(p.elapsed_seconds > 0 ? [{ label: 'Laufzeit', val: formatTime(p.elapsed_seconds) }] : []),
+                ].map(({ label, val }) => (
+                  <div key={label} style={{ background: 'var(--surface2)', borderRadius: 8, padding: '8px 10px' }}>
+                    <p style={{ fontSize: 10, color: 'var(--text3)', margin: '0 0 2px' }}>{label}</p>
+                    <p style={{ fontSize: 13, fontWeight: 700, fontFamily: 'var(--mono)', margin: 0 }}>{val}</p>
+                  </div>
+                ))}
+              </div>
+
+              {p.filename && (
+                <p style={{ fontSize: 11, color: 'var(--text2)', marginTop: 10, marginBottom: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--mono)' }}>
+                  {p.filename}
+                </p>
+              )}
+
+              {/* GCode Layer Preview */}
+              {iAmOccupying && p.occupation?.file_id && showProgress && (
+                <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+                  <GCodeLayerPreview fileId={p.occupation.file_id} currentLayer={p.layer} layerCount={p.layer_count} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Admin controls */}
           {(isAdmin || iAmOccupying) && showProgress && (
-            <div className="flex gap-2 flex-wrap">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {p.state === 'printing' && (
                 <button onClick={() => control('pause')} disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-medium border border-yellow-300 text-yellow-700 hover:bg-yellow-50 rounded-lg disabled:opacity-50">
+                  style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, border: '0.5px solid var(--amber)', color: 'var(--amber)', borderRadius: 10, background: 'var(--amber-bg)', cursor: 'pointer', fontFamily: 'inherit' }}>
                   Pausieren
                 </button>
               )}
               {p.state === 'paused' && (
                 <button onClick={() => control('resume')} disabled={actionLoading}
-                  className="px-4 py-2 text-sm font-medium border border-green-300 text-green-700 hover:bg-green-50 rounded-lg disabled:opacity-50">
+                  style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, border: '0.5px solid var(--emerald)', color: 'var(--emerald)', borderRadius: 10, background: 'var(--emerald-bg)', cursor: 'pointer', fontFamily: 'inherit' }}>
                   Fortsetzen
                 </button>
               )}
               {isAdmin && (
                 <>
                   <button onClick={() => setConfirmAction('cancel')} disabled={actionLoading}
-                    className="px-4 py-2 text-sm font-medium border border-red-300 text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-50">
+                    style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, border: '0.5px solid var(--red)', color: 'var(--red)', borderRadius: 10, background: 'var(--red-bg)', cursor: 'pointer', fontFamily: 'inherit' }}>
                     Abbrechen
                   </button>
                   <button onClick={() => setConfirmAction('emergency_stop')} disabled={actionLoading}
-                    className="px-4 py-2 text-sm font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50">
-                    🛑 Notfall-Stopp
+                    style={{ padding: '8px 16px', fontSize: 13, fontWeight: 700, background: 'var(--red)', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Notfall-Stopp
                   </button>
                 </>
               )}
             </div>
           )}
+        </div>
 
-          {/* Druckdetails – nur Admin/Owner */}
-          {canSeeDetails && (showProgress || p.state === 'complete') && (
-            <div className="rounded-lg bg-gray-50 border border-gray-200 divide-y divide-gray-100">
-              {p.filename && (
-                <div className="px-4 py-2.5 flex items-center justify-between gap-4">
-                  <span className="text-xs text-gray-500 shrink-0">Datei</span>
-                  <span className="text-xs font-medium text-gray-800 truncate text-right">{p.filename}</span>
-                </div>
-              )}
-              {p.layer != null && p.layer_count != null && (
-                <div className="px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Layer</span>
-                  <span className="text-xs font-medium text-gray-800">{p.layer} / {p.layer_count}</span>
-                </div>
-              )}
-              {/* G-Code Layer-Vorschau – nur beim eigenen aktiven Druck */}
-              {iAmOccupying && p.occupation?.file_id && showProgress && (
-                <div className="px-4 py-3 flex justify-center border-t border-gray-100">
-                  <GCodeLayerPreview
-                    fileId={p.occupation.file_id}
-                    currentLayer={p.layer}
-                    layerCount={p.layer_count}
-                  />
-                </div>
-              )}
-              {p.z_pos > 0 && (
-                <div className="px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Z-Position</span>
-                  <span className="text-xs font-medium text-gray-800">{p.z_pos} mm</span>
-                </div>
-              )}
-              {filamentM && (
-                <div className="px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Filament verbraucht</span>
-                  <span className="text-xs font-medium text-gray-800">
-                    {filamentM} m{p.filament_type ? ` · ${p.filament_type}` : ''}
-                  </span>
-                </div>
-              )}
-              {p.elapsed_seconds > 0 && (
-                <div className="px-4 py-2.5 flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Laufzeit</span>
-                  <span className="text-xs font-medium text-gray-800">{formatTime(p.elapsed_seconds)}</span>
-                </div>
-              )}
-              <div className="px-4 py-2.5 flex items-center justify-between">
-                <span className="text-xs text-gray-500">Hotend</span>
-                <span className="text-xs font-medium text-gray-800">
-                  {p.temp_hotend}°C
-                  {p.temp_hotend_target > 0 && <span className="text-gray-400"> / {p.temp_hotend_target}°C</span>}
-                </span>
-              </div>
-              <div className="px-4 py-2.5 flex items-center justify-between">
-                <span className="text-xs text-gray-500">Bett</span>
-                <span className="text-xs font-medium text-gray-800">
-                  {p.temp_bed}°C
-                  {p.temp_bed_target > 0 && <span className="text-gray-400"> / {p.temp_bed_target}°C</span>}
-                </span>
+        {/* RIGHT: Status + actions + sidebar */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* "Du bist dran!" Banner */}
+          {notified && (
+            <div style={{ background: 'var(--blue-bg)', border: '0.5px solid var(--blue)', borderRadius: 14, padding: 14 }}>
+              <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--blue)', margin: '0 0 4px' }}>Du bist dran!</p>
+              <p style={{ fontSize: 12, color: 'var(--blue)', margin: '0 0 10px', opacity: 0.8 }}>5 Minuten um den Drucker zu beanspruchen.</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {canClaimAfterNotified && (
+                  <button onClick={claim} disabled={actionLoading} className="btn-lime" style={{ flex: 1, padding: '8px', fontSize: 13 }}>
+                    Beanspruchen
+                  </button>
+                )}
+                <button onClick={acknowledge} disabled={actionLoading} className="btn-secondary" style={{ padding: '8px 12px', fontSize: 13 }}>
+                  Überspringen
+                </button>
               </div>
             </div>
           )}
 
-          {/* Belegung von anderem Nutzer */}
-          {p.occupation && !p.occupation.is_mine && !showProgress && (
-            <div className="rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-600">
-              <p className="font-medium text-gray-800">Drucker belegt</p>
-              <p className="text-gray-500 mt-0.5">
-                von {isAdmin ? p.occupation.user_email : p.occupation.user_display}
+          {/* Abholen Banner */}
+          {iAmAwaiting && (
+            <div style={{ background: 'var(--amber-bg)', border: '0.5px solid var(--amber)', borderRadius: 14, padding: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <p style={{ fontSize: 14, fontWeight: 800, color: 'var(--amber)', margin: 0 }}>Druck fertig – abholen!</p>
+                {pickupSecs > 0 && (
+                  <span style={{ fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 700, color: 'var(--amber)' }}>{formatCountdownHM(pickupSecs)}</span>
+                )}
+              </div>
+              <button onClick={release} disabled={actionLoading}
+                style={{ width: '100%', background: 'var(--amber)', color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 10, border: 'none', padding: '10px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Freigeben (Abgeholt)
+              </button>
+            </div>
+          )}
+
+          {/* Externer Druck Banner */}
+          {p.external_print && (
+            <div style={{ background: 'var(--amber-bg)', border: '0.5px solid var(--amber)', borderRadius: 12, padding: '10px 14px' }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', margin: '0 0 2px' }}>Außerhalb Portal gestartet</p>
+              <p style={{ fontSize: 12, color: 'var(--text2)', margin: 0 }}>Dieser Druck ist keinem Nutzer zugeordnet.</p>
+            </div>
+          )}
+
+          {/* Status card */}
+          <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <StatusDot state={p.state} size={10} />
+              <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em' }}>{cfg.label}</span>
+            </div>
+            <p style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', margin: 0 }}>{p.name}</p>
+            {iAmOccupying && !iAmAwaiting && (
+              <p style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 600, margin: '4px 0 0' }}>Du nutzt diesen Drucker</p>
+            )}
+            {p.occupation && !p.occupation.is_mine && (
+              <p style={{ fontSize: 12, color: 'var(--text2)', margin: '4px 0 0' }}>
+                Belegt von: {isAdmin ? p.occupation.user_email : p.occupation.user_display}
                 {p.occupation.status === 'awaiting_pickup' && ' · wartet auf Abholung'}
               </p>
+            )}
+            {p.state === 'offline' && (
+              <p style={{ fontSize: 12, color: 'var(--text3)', margin: '4px 0 0' }}>Drucker nicht erreichbar</p>
+            )}
+          </div>
+
+          {/* Queue info */}
+          {p.queue_count > 0 && (
+            <div style={{ background: '#fff', borderRadius: 12, border: '0.5px solid var(--border)', padding: '10px 14px', fontSize: 12, color: 'var(--text2)' }}>
+              {p.queue_count} {p.queue_count === 1 ? 'Person' : 'Personen'} in der Warteschlange
             </div>
           )}
-
-          {p.state === 'offline' && <p className="text-sm text-gray-400">Drucker nicht erreichbar.</p>}
-
-          {/* Warteschlange */}
-          {p.queue_count > 0 && (
-            <p className="text-xs text-gray-500">
-              {p.queue_count} {p.queue_count === 1 ? 'Person' : 'Personen'} in der Warteschlange
-            </p>
-          )}
-
-          {/* Eigene Queue-Position */}
           {p.my_queue && p.my_queue.status === 'waiting' && (
-            <div className="flex items-center justify-between rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
-              <p className="text-xs text-gray-700">
-                <span className="font-medium">Position {p.my_queue.position}</span> in der Warteschlange
+            <div style={{ background: 'var(--blue-bg)', borderRadius: 12, border: '0.5px solid var(--blue)', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue)', margin: 0 }}>
+                Position {p.my_queue.position} in der Warteschlange
               </p>
               <button onClick={leaveQueue} disabled={actionLoading}
-                className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50">
+                style={{ fontSize: 11, color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit' }}>
                 Verlassen
               </button>
             </div>
           )}
 
-          {actionError && <p className="text-xs text-red-600">{actionError}</p>}
+          {actionError && (
+            <div style={{ background: 'var(--red-bg)', borderRadius: 10, padding: '8px 12px', fontSize: 13, color: 'var(--red)' }}>
+              {actionError}
+            </div>
+          )}
 
-          {/* Aktions-Buttons */}
-          <div className="flex gap-2 pt-1 flex-wrap">
+          {/* Action buttons */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {canClaim && !notified && (
-              <button onClick={claim} disabled={actionLoading}
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg">
+              <button onClick={claim} disabled={actionLoading} className="btn-lime" style={{ padding: '11px 16px', fontSize: 14, width: '100%' }}>
                 Drucker beanspruchen
               </button>
             )}
             {iAmOccupying && !iAmAwaiting && !['printing', 'paused'].includes(p.state) && (
-              <button onClick={() => setShowStartModal(true)} disabled={actionLoading}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2 rounded-lg">
-                Druck starten
+              <button
+                onClick={() => navigate(`/drucker/${id}/drucken`)}
+                disabled={actionLoading}
+                className="btn-lime"
+                style={{ padding: '11px 16px', fontSize: 14, width: '100%' }}
+              >
+                Jetzt drucken
               </button>
             )}
             {iAmOccupying && !iAmAwaiting && (
-              <button onClick={release} disabled={actionLoading}
-                className="flex-1 border border-red-300 text-red-700 hover:bg-red-50 text-sm font-medium py-2 rounded-lg disabled:opacity-50">
+              <button onClick={release} disabled={actionLoading} className="btn-secondary" style={{ padding: '10px 16px', fontSize: 14, width: '100%' }}>
                 Drucker freigeben
               </button>
             )}
             {canQueue && (
-              <button onClick={joinQueue} disabled={actionLoading}
-                className="flex-1 border border-blue-300 text-blue-700 hover:bg-blue-50 text-sm font-medium py-2 rounded-lg disabled:opacity-50">
+              <button onClick={joinQueue} disabled={actionLoading} className="btn-secondary"
+                style={{ padding: '10px 16px', fontSize: 14, width: '100%', color: 'var(--blue)', borderColor: 'var(--blue)' }}>
                 In Warteschlange einreihen
               </button>
             )}
           </div>
 
+          {/* Filament slots */}
+          {slots.filter(s => s.filament_name).length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: 14 }}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Filament</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {slots.map(s => <SlotCard key={s.slot_index} s={s} />)}
+              </div>
+            </div>
+          )}
+
+          {/* Slicer profiles */}
+          {slicerProfiles.length > 0 && (
+            <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: 14 }}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Slicer-Profile</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {slicerProfiles.map(sp => (
+                  <div key={sp.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--surface2)', borderRadius: 9, padding: '8px 10px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sp.name}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600 }}>
+                          {SLICER_LABELS[sp.slicer_type] ?? sp.slicer_type}
+                        </span>
+                        {sp.description && <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0 }}>{sp.description}</p>}
+                      </div>
+                    </div>
+                    <a
+                      href={`/api/slicer-profiles/${sp.id}/download`}
+                      download={sp.filename_orig}
+                      style={{ fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--blue)', color: 'var(--blue)', borderRadius: 7, textDecoration: 'none', flexShrink: 0, fontWeight: 600 }}
+                    >
+                      ↓
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Letzte Wartung */}
+          {lastMaintenance && (
+            <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: '12px 14px' }}>
+              <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Letzte Wartung</p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{lastMaintenance.action}</p>
+              {lastMaintenance.notes && <p style={{ fontSize: 12, color: 'var(--text2)', margin: '2px 0 0' }}>{lastMaintenance.notes}</p>}
+              <p style={{ fontSize: 11, color: 'var(--text3)', margin: '4px 0 0', fontFamily: 'var(--mono)' }}>
+                {new Date(lastMaintenance.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Filament-Slots */}
-      {slots.filter(s => s.filament_name).length > 0 && (
-        <div className="mt-4 bg-white border border-gray-200 rounded-xl p-4">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Filament</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {slots.map(s => {
-              const pct = s.remaining_weight_g != null && s.initial_weight_g
-                ? Math.max(0, Math.min(100, (s.remaining_weight_g / s.initial_weight_g) * 100))
-                : null
-              const barColor = pct == null ? 'bg-gray-200' : pct > 25 ? 'bg-green-500' : pct > 10 ? 'bg-yellow-400' : 'bg-red-500'
-              return (
-                <div key={s.slot_index} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
-                  {s.color_hex ? (
-                    <div className="w-5 h-5 rounded flex-shrink-0 border border-gray-200" style={{ backgroundColor: s.color_hex }} />
-                  ) : (
-                    <div className="w-5 h-5 rounded flex-shrink-0 bg-gray-200" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-xs font-medium text-gray-800 truncate">{s.filament_name}</p>
-                      {s.material && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 flex-shrink-0">{s.material}</span>
-                      )}
-                      {s.low_spool && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-600 flex-shrink-0">Wenig</span>
-                      )}
-                    </div>
-                    {pct != null && (
-                      <div className="mt-1 w-full bg-gray-200 rounded-full h-1.5">
-                        <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    )}
-                    {s.remaining_weight_g != null && (
-                      <p className="text-xs text-gray-400 mt-0.5">{s.remaining_weight_g} g verbleibend</p>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-300 flex-shrink-0">#{s.slot_index + 1}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Slicer-Profile */}
-      {slicerProfiles.length > 0 && (
-        <div className="mt-4 bg-white border border-gray-200 rounded-xl p-4">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-3">Slicer-Profile</p>
-          <div className="space-y-2">
-            {slicerProfiles.map(p => (
-              <div key={p.id} className="flex items-center justify-between gap-3 bg-gray-50 rounded-lg px-3 py-2">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-xs font-medium text-gray-800 truncate">{p.name}</p>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 flex-shrink-0">
-                      {SLICER_LABELS[p.slicer_type] ?? p.slicer_type}
-                    </span>
-                  </div>
-                  {p.description && <p className="text-xs text-gray-400 mt-0.5">{p.description}</p>}
-                </div>
-                <a
-                  href={`/api/slicer-profiles/${p.id}/download`}
-                  download={p.filename_orig}
-                  className="flex-shrink-0 text-xs px-3 py-1.5 border border-blue-200 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                >
-                  ↓ Download
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Letzte Wartung */}
-      {lastMaintenance && (
-        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 flex items-start gap-3">
-          <span className="text-lg mt-0.5">🔧</span>
-          <div>
-            <p className="text-xs font-medium text-gray-500">Letzte Wartung</p>
-            <p className="text-sm text-gray-800 font-medium">{lastMaintenance.action}</p>
-            {lastMaintenance.notes && (
-              <p className="text-xs text-gray-500">{lastMaintenance.notes}</p>
-            )}
-            <p className="text-xs text-gray-400 mt-0.5">
-              {new Date(lastMaintenance.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Druck-Start-Modal */}
-      {showStartModal && (
-        <StartPrintModal
-          printerId={id!}
-          userBalanceCents={user?.balance_cents ?? 0}
-          isAdmin={isAdmin}
-          onClose={() => setShowStartModal(false)}
-          onStarted={async () => {
-            setShowStartModal(false)
-            load()
-            // Guthaben im Store aktualisieren
-            try {
-              const r = await api.get('/user/me')
-              if (accessToken && user) setAuth(accessToken, r.data)
-            } catch {}
-          }}
-        />
-      )}
-
       {/* Erstattungs-Toast */}
       {refundCents !== null && refundCents > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-green-700 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-2">
-          <span>Druck abgebrochen –</span>
-          <span className="font-bold">{(refundCents / 100).toFixed(2)} € erstattet</span>
-          <button onClick={() => setRefundCents(null)} className="ml-2 text-green-200 hover:text-white">&times;</button>
+        <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 50, background: 'var(--emerald)', color: '#fff', fontSize: 14, fontWeight: 700, padding: '12px 20px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+          Druck abgebrochen – {(refundCents / 100).toFixed(2)} € erstattet
+          <button onClick={() => setRefundCents(null)} style={{ color: 'rgba(255,255,255,0.7)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>&times;</button>
         </div>
       )}
 
       {/* Bestätigungs-Modal */}
       {confirmAction && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">
-              {confirmAction === 'emergency_stop' ? '🛑 Notfall-Stopp bestätigen' : 'Druck abbrechen?'}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '0 16px' }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 360, width: '100%', border: '0.5px solid var(--border)' }}>
+            <h3 style={{ fontWeight: 800, fontSize: 16, margin: '0 0 8px' }}>
+              {confirmAction === 'emergency_stop' ? 'Notfall-Stopp bestätigen' : 'Druck abbrechen?'}
             </h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p style={{ fontSize: 14, color: 'var(--text2)', margin: '0 0 18px' }}>
               {confirmAction === 'emergency_stop'
                 ? 'Der Drucker wird sofort gestoppt. Alle Bewegungen werden abgebrochen.'
                 : 'Der aktuelle Druck wird abgebrochen. Das Modell muss neu gestartet werden.'}
             </p>
-            <div className="flex gap-3">
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={async () => {
                   const a = confirmAction
@@ -915,22 +670,17 @@ export default function PrinterDetail() {
                   setRefundCents(null)
                   try {
                     const r = await api.post(`/printers/${id}/control`, { action: a })
-                    if (a === 'cancel' && r.data?.refund_cents > 0) {
-                      setRefundCents(r.data.refund_cents)
-                    }
+                    if (a === 'cancel' && r.data?.refund_cents > 0) setRefundCents(r.data.refund_cents)
                     load()
                   } catch (e: any) {
                     setActionError(e.response?.data?.detail ?? 'Fehler')
                   }
                 }}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg"
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', fontWeight: 800, fontSize: 14, borderRadius: 10, border: 'none', padding: '10px', cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Ja, ausführen
               </button>
-              <button
-                onClick={() => setConfirmAction(null)}
-                className="flex-1 border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium py-2 rounded-lg"
-              >
+              <button onClick={() => setConfirmAction(null)} className="btn-secondary" style={{ flex: 1, padding: '10px', fontSize: 14 }}>
                 Abbrechen
               </button>
             </div>

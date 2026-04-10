@@ -19,12 +19,12 @@ interface TopupRequest {
   admin_note: string | null
 }
 
-const PRESET_AMOUNTS = [500, 1000, 2000, 5000] // cents: 5€, 10€, 20€, 50€
+const PRESET_AMOUNTS = [500, 1000, 2000, 5000]
 
 const TYPE_LABEL: Record<string, string> = {
   topup: 'Aufladung',
   charge: 'Abbuchung',
-  refund: 'Rückerstattung',
+  refund: 'Erstattung',
 }
 
 export default function Wallet() {
@@ -35,8 +35,6 @@ export default function Wallet() {
   const [success, setSuccess] = useState('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [txLoading, setTxLoading] = useState(true)
-
-  // Aufladeantrag
   const [topupRequests, setTopupRequests] = useState<TopupRequest[]>([])
   const [topupAmount, setTopupAmount] = useState(1000)
   const [topupCustom, setTopupCustom] = useState('')
@@ -49,9 +47,7 @@ export default function Wallet() {
   }
 
   useEffect(() => {
-    api.get('/user/transactions')
-      .then(r => setTransactions(r.data))
-      .finally(() => setTxLoading(false))
+    api.get('/user/transactions').then(r => setTransactions(r.data)).finally(() => setTxLoading(false))
     loadTopupRequests()
   }, [])
 
@@ -61,20 +57,13 @@ export default function Wallet() {
     e.preventDefault()
     setTopupMsg(null)
     const cents = topupCustom ? Math.round(parseFloat(topupCustom.replace(',', '.')) * 100) : topupAmount
-    if (!cents || cents < 100) {
-      setTopupMsg({ type: 'error', text: 'Mindestbetrag: 1,00 €' })
-      return
-    }
-    if (cents > 20000) {
-      setTopupMsg({ type: 'error', text: 'Höchstbetrag: 200,00 €' })
-      return
-    }
+    if (!cents || cents < 100) { setTopupMsg({ type: 'error', text: 'Mindestbetrag: 1,00 €' }); return }
+    if (cents > 20000) { setTopupMsg({ type: 'error', text: 'Höchstbetrag: 200,00 €' }); return }
     setTopupLoading(true)
     try {
       await api.post('/user/topup-request', { amount_cents: cents, note: topupNote.trim() || null })
       setTopupMsg({ type: 'success', text: 'Aufladeantrag gestellt! Ein Admin wird ihn bearbeiten.' })
-      setTopupNote('')
-      setTopupCustom('')
+      setTopupNote(''); setTopupCustom('')
       loadTopupRequests()
     } catch (e: any) {
       setTopupMsg({ type: 'error', text: e.response?.data?.detail ?? 'Fehler' })
@@ -85,19 +74,16 @@ export default function Wallet() {
 
   const handleRedeem = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
-    setSuccess('')
+    setError(''); setSuccess('')
     setLoading(true)
     try {
       const res = await api.post('/vouchers/redeem', { code: code.trim().toUpperCase() })
       setSuccess(`Gutschein eingelöst! ${formatBalance(res.data.value_cents)} wurden gutgeschrieben.`)
       setCode('')
-      // Guthaben im Store aktualisieren
       if (user) {
         const meRes = await api.get('/user/me')
         setAuth(accessToken!, meRes.data)
       }
-      // Transaktionen neu laden
       const txRes = await api.get('/user/transactions')
       setTransactions(txRes.data)
     } catch (err: any) {
@@ -111,165 +97,139 @@ export default function Wallet() {
     new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold text-gray-900">Guthaben</h1>
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.04em', margin: 0 }}>Guthaben</h1>
+      </div>
 
-      {/* Guthaben-Anzeige */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">Aktuelles Guthaben</p>
-          <p className="text-4xl font-bold text-gray-900 mt-1">
+      {/* Top grid: balance card + voucher + topup */}
+      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 12, marginBottom: 12 }}
+           className="grid-cols-1 md:grid-cols-[260px_1fr]">
+
+        {/* Balance card */}
+        <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: '24px 20px' }}>
+          <p style={{ fontSize: 11, color: 'var(--text3)', margin: '0 0 4px', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.06em' }}>Guthaben</p>
+          <p style={{ fontSize: 48, fontWeight: 900, letterSpacing: '-0.05em', margin: 0, lineHeight: 1.1 }}>
             {user ? formatBalance(user.balance_cents) : '–'}
           </p>
         </div>
-        <div className="text-5xl">💳</div>
-      </div>
 
-      {/* Code einlösen */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Gutschein-Code einlösen</h2>
-        <form onSubmit={handleRedeem} className="flex gap-3">
-          <input
-            type="text"
-            value={code}
-            onChange={e => setCode(e.target.value.toUpperCase())}
-            placeholder="XXXX-XXXX-XXXX"
-            maxLength={14}
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
-          />
-          <button
-            type="submit"
-            disabled={loading || code.length < 3}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {loading ? '...' : 'Einlösen'}
-          </button>
-        </form>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-        {success && <p className="mt-2 text-sm text-green-600">{success}</p>}
-      </div>
-
-      {/* Aufladeantrag */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-1">Aufladeantrag stellen</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          Zahle per Überweisung oder Bar und stelle einen Antrag – ein Admin genehmigt die Gutschrift.
-        </p>
-
-        {pendingRequest ? (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
-            <p className="font-medium text-yellow-800">Offener Antrag</p>
-            <p className="text-yellow-700 mt-0.5">
-              {formatBalance(pendingRequest.amount_cents)} – wird bearbeitet
-              {pendingRequest.note && <span className="text-yellow-600"> · {pendingRequest.note}</span>}
-            </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Voucher */}
+          <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: '16px 18px' }}>
+            <p style={{ fontSize: 13, fontWeight: 800, margin: '0 0 10px' }}>Gutschein-Code einlösen</p>
+            <form onSubmit={handleRedeem} style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase())}
+                placeholder="XXXX-XXXX-XXXX" maxLength={14}
+                className="input-lime"
+                style={{ fontFamily: 'var(--mono)', fontSize: 13, flex: 1 }}
+              />
+              <button type="submit" disabled={loading || code.length < 3} className="btn-lime" style={{ padding: '9px 16px', fontSize: 13, flexShrink: 0 }}>
+                {loading ? '...' : 'Einlösen'}
+              </button>
+            </form>
+            {error && <p style={{ fontSize: 12, color: 'var(--red)', marginTop: 6 }}>{error}</p>}
+            {success && <p style={{ fontSize: 12, color: 'var(--emerald)', marginTop: 6 }}>{success}</p>}
           </div>
-        ) : (
-          <form onSubmit={submitTopupRequest} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-2">Betrag</label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {PRESET_AMOUNTS.map(a => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => { setTopupAmount(a); setTopupCustom('') }}
-                    className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
-                      topupAmount === a && !topupCustom
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'border-gray-200 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {formatBalance(a)}
-                  </button>
-                ))}
+
+          {/* Topup request */}
+          <div style={{ background: '#fff', borderRadius: 14, border: '0.5px solid var(--border)', padding: '16px 18px' }}>
+            <p style={{ fontSize: 13, fontWeight: 800, margin: '0 0 4px' }}>Aufladeantrag stellen</p>
+            <p style={{ fontSize: 12, color: 'var(--text3)', margin: '0 0 12px' }}>Zahle per Überweisung oder Bar – ein Admin genehmigt die Gutschrift.</p>
+
+            {pendingRequest ? (
+              <div style={{ background: 'var(--amber-bg)', border: '0.5px solid var(--amber)', borderRadius: 10, padding: '10px 12px', fontSize: 13 }}>
+                <p style={{ fontWeight: 700, color: 'var(--amber)', margin: '0 0 2px' }}>Offener Antrag</p>
+                <p style={{ color: 'var(--text2)', margin: 0 }}>
+                  {formatBalance(pendingRequest.amount_cents)} – wird bearbeitet
+                  {pendingRequest.note && <span> · {pendingRequest.note}</span>}
+                </p>
               </div>
-              <input
-                type="text"
-                value={topupCustom}
-                onChange={e => setTopupCustom(e.target.value)}
-                placeholder="Anderen Betrag eingeben (z.B. 15,00)"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Kommentar (optional)
-              </label>
-              <input
-                type="text"
-                value={topupNote}
-                onChange={e => setTopupNote(e.target.value)}
-                placeholder="z.B. Überweisung vom 07.04., Referenz: 12345"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            {topupMsg && (
-              <div className={`text-sm px-3 py-2 rounded-lg ${topupMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                {topupMsg.text}
+            ) : (
+              <form onSubmit={submitTopupRequest} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {PRESET_AMOUNTS.map(a => (
+                    <button key={a} type="button" onClick={() => { setTopupAmount(a); setTopupCustom('') }}
+                      style={{
+                        padding: '5px 12px', fontSize: 13, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+                        border: topupAmount === a && !topupCustom ? '1.5px solid var(--lime)' : '0.5px solid var(--border)',
+                        background: topupAmount === a && !topupCustom ? 'var(--lime-bg)' : 'transparent',
+                        fontWeight: topupAmount === a && !topupCustom ? 800 : 500,
+                      }}>
+                      {formatBalance(a)}
+                    </button>
+                  ))}
+                </div>
+                <input type="text" value={topupCustom} onChange={e => setTopupCustom(e.target.value)} placeholder="Anderen Betrag (z.B. 15,00)" className="input-lime" style={{ fontSize: 13 }} />
+                <input type="text" value={topupNote} onChange={e => setTopupNote(e.target.value)} placeholder="Kommentar (optional)" className="input-lime" style={{ fontSize: 13 }} />
+                {topupMsg && (
+                  <div style={{ borderRadius: 8, padding: '8px 12px', fontSize: 12, background: topupMsg.type === 'success' ? 'var(--emerald-bg)' : 'var(--red-bg)', color: topupMsg.type === 'success' ? 'var(--emerald)' : 'var(--red)' }}>
+                    {topupMsg.text}
+                  </div>
+                )}
+                <button type="submit" disabled={topupLoading} className="btn-lime" style={{ padding: '9px 16px', fontSize: 13, alignSelf: 'flex-start' }}>
+                  {topupLoading ? 'Sende...' : 'Antrag stellen'}
+                </button>
+              </form>
+            )}
+
+            {topupRequests.filter(r => r.status !== 'pending').length > 0 && (
+              <div style={{ marginTop: 12, borderTop: '0.5px solid var(--border)', paddingTop: 12 }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Frühere Anträge</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {topupRequests.filter(r => r.status !== 'pending').slice(0, 5).map(r => (
+                    <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+                      <span style={{ color: 'var(--text2)' }}>{formatBalance(r.amount_cents)}</span>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: r.status === 'approved' ? 'var(--emerald-bg)' : 'var(--red-bg)', color: r.status === 'approved' ? 'var(--emerald)' : 'var(--red)' }}>
+                        {r.status === 'approved' ? 'Genehmigt' : 'Abgelehnt'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
-            <button
-              type="submit"
-              disabled={topupLoading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg"
-            >
-              {topupLoading ? 'Sende...' : 'Antrag stellen'}
-            </button>
-          </form>
-        )}
-
-        {topupRequests.filter(r => r.status !== 'pending').length > 0 && (
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <p className="text-xs font-medium text-gray-400 mb-2">Frühere Anträge</p>
-            <div className="space-y-1.5">
-              {topupRequests.filter(r => r.status !== 'pending').slice(0, 5).map(r => (
-                <div key={r.id} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{formatBalance(r.amount_cents)}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    r.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {r.status === 'approved' ? 'Genehmigt' : 'Abgelehnt'}
-                  </span>
-                </div>
-              ))}
-            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Transaktionshistorie */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-base font-semibold text-gray-900 mb-4">Transaktionshistorie</h2>
+      {/* Transaction history */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '0.5px solid var(--border)' }}>
+          <p style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>Transaktionshistorie</p>
+        </div>
         {txLoading ? (
-          <p className="text-sm text-gray-400">Laden...</p>
+          <p style={{ color: 'var(--text3)', fontSize: 13, padding: '20px 18px' }}>Laden...</p>
         ) : transactions.length === 0 ? (
-          <p className="text-sm text-gray-400">Noch keine Transaktionen.</p>
+          <p style={{ color: 'var(--text3)', fontSize: 13, padding: '20px 18px' }}>Noch keine Transaktionen.</p>
         ) : (
-          <table className="w-full text-sm">
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-100">
-                <th className="pb-2 font-medium">Datum</th>
-                <th className="pb-2 font-medium">Art</th>
-                <th className="pb-2 font-medium">Beschreibung</th>
-                <th className="pb-2 font-medium text-right">Betrag</th>
+              <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                {['Datum', 'Art', 'Beschreibung', 'Betrag'].map(h => (
+                  <th key={h} style={{ textAlign: h === 'Betrag' ? 'right' : 'left', padding: '9px 14px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {transactions.map(tx => (
-                <tr key={tx.id} className="border-b border-gray-50">
-                  <td className="py-2 text-gray-500">{formatDate(tx.created_at)}</td>
-                  <td className="py-2">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      tx.type === 'topup' ? 'bg-green-100 text-green-700' :
-                      tx.type === 'refund' ? 'bg-blue-100 text-blue-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
+              {transactions.map((tx, i) => (
+                <tr key={tx.id} style={{ borderBottom: i < transactions.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
+                  <td style={{ padding: '9px 14px', color: 'var(--text2)', fontFamily: 'var(--mono)', fontSize: 12, whiteSpace: 'nowrap' }}>
+                    {formatDate(tx.created_at)}
+                  </td>
+                  <td style={{ padding: '9px 14px' }}>
+                    <span style={{
+                      fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700,
+                      background: tx.type === 'topup' ? 'var(--emerald-bg)' : tx.type === 'refund' ? 'var(--blue-bg)' : 'var(--red-bg)',
+                      color: tx.type === 'topup' ? 'var(--emerald)' : tx.type === 'refund' ? 'var(--blue)' : 'var(--red)',
+                    }}>
                       {TYPE_LABEL[tx.type]}
                     </span>
                   </td>
-                  <td className="py-2 text-gray-700">{tx.description}</td>
-                  <td className={`py-2 text-right font-medium ${tx.amount_cents >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  <td style={{ padding: '9px 14px', color: 'var(--text2)' }}>{tx.description}</td>
+                  <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 800, fontFamily: 'var(--mono)', color: tx.amount_cents >= 0 ? 'var(--emerald)' : 'var(--red)' }}>
                     {tx.amount_cents >= 0 ? '+' : ''}{formatBalance(tx.amount_cents)}
                   </td>
                 </tr>

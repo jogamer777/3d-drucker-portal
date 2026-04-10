@@ -15,6 +15,13 @@ interface FilamentType {
   low_stock_threshold: number
   low_stock: boolean
   created_at: string
+  // Feature B: Druckparameter
+  print_temp_min: number | null
+  print_temp_max: number | null
+  bed_temp: number | null
+  cooling_percent: number | null
+  print_speed_mms: number | null
+  notes: string | null
 }
 
 interface SlotInfo {
@@ -42,6 +49,13 @@ const EMPTY_FORM = {
   markup_percent: 20,
   stock_count: 0,
   low_stock_threshold: 2,
+  // Feature B
+  print_temp_min: null as number | null,
+  print_temp_max: null as number | null,
+  bed_temp: null as number | null,
+  cooling_percent: null as number | null,
+  print_speed_mms: null as number | null,
+  notes: '',
 }
 
 function FilamentModal({
@@ -65,6 +79,12 @@ function FilamentModal({
           markup_percent: initial.markup_percent,
           stock_count: initial.stock_count,
           low_stock_threshold: initial.low_stock_threshold,
+          print_temp_min: initial.print_temp_min ?? null,
+          print_temp_max: initial.print_temp_max ?? null,
+          bed_temp: initial.bed_temp ?? null,
+          cooling_percent: initial.cooling_percent ?? null,
+          print_speed_mms: initial.print_speed_mms ?? null,
+          notes: initial.notes ?? '',
         }
       : { ...EMPTY_FORM }
   )
@@ -94,95 +114,146 @@ function FilamentModal({
     }
   }
 
+  const labelStyle: React.CSSProperties = { fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 3 }
+  const numField = (key: keyof typeof form, placeholder: string, suffix?: string) => (
+    <div>
+      <input
+        type="number"
+        value={form[key] === null || form[key] === undefined ? '' : String(form[key])}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value === '' ? null : parseInt(e.target.value) || null }))}
+        placeholder={placeholder}
+        className="input-lime"
+        style={{ fontSize: 12 }}
+      />
+      {suffix && <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, display: 'block' }}>{suffix}</span>}
+    </div>
+  )
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={onClose}>
-      <div className="bg-white rounded-xl max-w-md w-full shadow-xl" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h3 className="font-semibold text-gray-900">{initial ? 'Filament bearbeiten' : 'Neues Filament'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '14px 20px', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>{initial ? 'Filament bearbeiten' : 'Neues Filament'}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)', lineHeight: 1 }}>&times;</button>
         </div>
-        <div className="px-5 py-4 space-y-3">
-          <label className="block">
-            <span className="text-xs text-gray-500">Name *</span>
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label>
+            <span style={labelStyle}>Name *</span>
             <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="input-lime" style={{ fontSize: 13 }} />
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs text-gray-500">Material</span>
+            <label>
+              <span style={labelStyle}>Material</span>
               <select value={form.material} onChange={e => setForm(f => ({ ...f, material: e.target.value }))}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none">
+                className="input-lime" style={{ fontSize: 13 }}>
                 {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </label>
-            <label className="block">
-              <span className="text-xs text-gray-500">Farb-Name</span>
+            <label>
+              <span style={labelStyle}>Farb-Name</span>
               <input type="text" value={form.color_name} onChange={e => setForm(f => ({ ...f, color_name: e.target.value }))}
-                placeholder="z.B. Schwarz"
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                placeholder="z.B. Schwarz" className="input-lime" style={{ fontSize: 13 }} />
             </label>
           </div>
 
-          <label className="block">
-            <span className="text-xs text-gray-500">Farb-Hex</span>
-            <div className="mt-1 flex gap-2 items-center">
+          <label>
+            <span style={labelStyle}>Farb-Hex</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input type="color" value={form.color_hex} onChange={e => setForm(f => ({ ...f, color_hex: e.target.value }))}
-                className="w-10 h-9 border border-gray-300 rounded cursor-pointer p-0.5" />
+                style={{ width: 40, height: 36, border: '0.5px solid var(--border)', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
               <input type="text" value={form.color_hex} onChange={e => setForm(f => ({ ...f, color_hex: e.target.value }))}
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="input-lime" style={{ flex: 1, fontSize: 13 }} />
             </div>
           </label>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs text-gray-500">Spulengewicht (g)</span>
+            <label>
+              <span style={labelStyle}>Spulengewicht (g)</span>
               <input type="number" min={1} value={form.weight_per_spool_g}
                 onChange={e => setForm(f => ({ ...f, weight_per_spool_g: parseInt(e.target.value) || 1000 }))}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="input-lime" style={{ fontSize: 13 }} />
             </label>
-            <label className="block">
-              <span className="text-xs text-gray-500">Einkaufspreis (Cent)</span>
+            <label>
+              <span style={labelStyle}>Einkaufspreis (Cent)</span>
               <input type="number" min={0} value={form.purchase_price_cents}
                 onChange={e => setForm(f => ({ ...f, purchase_price_cents: parseInt(e.target.value) || 0 }))}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="input-lime" style={{ fontSize: 13 }} />
             </label>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs text-gray-500">Aufschlag (%)</span>
+            <label>
+              <span style={labelStyle}>Aufschlag (%)</span>
               <input type="number" min={0} max={500} value={form.markup_percent}
                 onChange={e => setForm(f => ({ ...f, markup_percent: parseInt(e.target.value) || 0 }))}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="input-lime" style={{ fontSize: 13 }} />
             </label>
-            <div className="flex flex-col justify-end">
-              <span className="text-xs text-gray-500">Preis pro Gramm</span>
-              <span className="text-sm font-semibold text-blue-700 mt-1.5">
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <span style={labelStyle}>Preis pro Gramm</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--lime-dark)', marginTop: 4 }}>
                 {isNaN(pricePerGram) ? '—' : `${pricePerGram} Ct/g (${(pricePerGram / 100).toFixed(3)} €)`}
               </span>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="text-xs text-gray-500">Lagerbestand (Spulen)</span>
+            <label>
+              <span style={labelStyle}>Lagerbestand (Spulen)</span>
               <input type="number" min={0} value={form.stock_count}
                 onChange={e => setForm(f => ({ ...f, stock_count: parseInt(e.target.value) || 0 }))}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="input-lime" style={{ fontSize: 13 }} />
             </label>
-            <label className="block">
-              <span className="text-xs text-gray-500">Warnung unter (Spulen)</span>
+            <label>
+              <span style={labelStyle}>Warnung unter (Spulen)</span>
               <input type="number" min={0} value={form.low_stock_threshold}
                 onChange={e => setForm(f => ({ ...f, low_stock_threshold: parseInt(e.target.value) || 0 }))}
-                className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                className="input-lime" style={{ fontSize: 13 }} />
             </label>
           </div>
 
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {/* Feature B: Druckparameter */}
+          <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 14, marginTop: 4 }}>
+            <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Druckparameter (optional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <span style={labelStyle}>Drucktemp. min (°C)</span>
+                {numField('print_temp_min', 'z.B. 200')}
+              </div>
+              <div>
+                <span style={labelStyle}>Drucktemp. max (°C)</span>
+                {numField('print_temp_max', 'z.B. 220')}
+              </div>
+              <div>
+                <span style={labelStyle}>Betttemp. (°C)</span>
+                {numField('bed_temp', 'z.B. 60')}
+              </div>
+              <div>
+                <span style={labelStyle}>Kühlung (%)</span>
+                {numField('cooling_percent', 'z.B. 100')}
+              </div>
+              <div className="col-span-2">
+                <span style={labelStyle}>Druckgeschwindigkeit (mm/s)</span>
+                {numField('print_speed_mms', 'z.B. 150')}
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <span style={labelStyle}>Notizen</span>
+              <textarea
+                value={form.notes ?? ''}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Sonstige Hinweise zum Filament..."
+                rows={2}
+                className="input-lime"
+                style={{ resize: 'none', fontSize: 13 }}
+              />
+            </div>
+          </div>
 
-          <button onClick={save} disabled={saving}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg">
+          {error && <p style={{ fontSize: 12, color: 'var(--red)' }}>{error}</p>}
+
+          <button onClick={save} disabled={saving} className="btn-lime" style={{ padding: '10px 0', fontSize: 13, width: '100%' }}>
             {saving ? 'Speichern...' : 'Speichern'}
           </button>
         </div>
@@ -242,67 +313,62 @@ function SlotCard({
   }
 
   return (
-    <div className={`border rounded-xl p-4 ${slot.low_spool ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-white'}`}>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-gray-500 uppercase">Slot {slot.slot_index + 1}</span>
+    <div style={{ border: `0.5px solid ${slot.low_spool ? 'var(--amber)' : 'var(--border)'}`, borderRadius: 12, padding: '12px 14px', background: slot.low_spool ? 'var(--amber-bg)' : '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Slot {slot.slot_index + 1}</span>
         {slot.low_spool && (
-          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">Wenig Filament</span>
+          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--amber-bg)', color: 'var(--amber)', border: '0.5px solid var(--amber)' }}>Wenig Filament</span>
         )}
       </div>
 
       {slot.filament_type ? (
         <>
-          <div className="flex items-center gap-2 mb-2">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             {slot.filament_type.color_hex && (
-              <div
-                className="w-5 h-5 rounded-full border border-gray-300 shrink-0"
-                style={{ backgroundColor: slot.filament_type.color_hex }}
-              />
+              <div style={{ width: 18, height: 18, borderRadius: '50%', border: '0.5px solid var(--border)', flexShrink: 0, background: slot.filament_type.color_hex }} />
             )}
-            <span className="text-sm font-medium text-gray-900">{slot.filament_type.name}</span>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>{slot.filament_type.name}</span>
           </div>
-          <div className="text-xs text-gray-500 mb-3">
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
             {slot.filament_type.material}
             {slot.filament_type.color_name && ` · ${slot.filament_type.color_name}`}
             {' · '}{slot.filament_type.price_per_gram_cents} Ct/g
           </div>
 
           {pct !== null && (
-            <div className="mb-3">
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
                 <span>Restbestand</span>
-                <span>{slot.remaining_weight_g}g von {slot.initial_weight_g}g ({pct}%)</span>
+                <span>{slot.remaining_weight_g}g / {slot.initial_weight_g}g ({pct}%)</span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${pct <= 10 ? 'bg-orange-500' : pct <= 25 ? 'bg-yellow-400' : 'bg-green-500'}`}
-                  style={{ width: `${pct}%` }}
-                />
+              <div style={{ width: '100%', background: 'var(--border)', borderRadius: 4, height: 6 }}>
+                <div style={{ height: 6, borderRadius: 4, width: `${pct}%`, background: pct <= 10 ? 'var(--red)' : pct <= 25 ? 'var(--amber)' : 'var(--lime-dark)', transition: 'width 0.3s' }} />
               </div>
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={newSpool} disabled={loading}
-              className="flex-1 text-xs border border-green-300 text-green-700 hover:bg-green-50 rounded-lg py-1.5 font-medium disabled:opacity-50">
+              style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--emerald)', background: 'transparent', color: 'var(--emerald)', fontWeight: 600 }}>
               Neue Spule
             </button>
             <button onClick={() => setAssigning(!assigning)} disabled={loading}
-              className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg px-3 py-1.5 font-medium">
+              style={{ fontSize: 11, padding: '5px 10px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--border)', background: 'transparent', color: 'var(--text2)' }}>
               Ändern
             </button>
           </div>
         </>
       ) : (
-        <p className="text-sm text-gray-400 mb-3">Kein Filament eingelegt</p>
+        <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Kein Filament eingelegt</p>
       )}
 
       {assigning && (
-        <div className="mt-3 space-y-2">
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <select
             value={selectedTypeId}
             onChange={e => setSelectedTypeId(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none"
+            className="input-lime"
+            style={{ fontSize: 12 }}
           >
             <option value="">— Slot leeren —</option>
             {filamentTypes.map(ft => (
@@ -311,27 +377,23 @@ function SlotCard({
               </option>
             ))}
           </select>
-          <button onClick={assign} disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium py-1.5 rounded-lg">
+          <button onClick={assign} disabled={loading} className="btn-lime" style={{ fontSize: 11, padding: '6px 0', width: '100%' }}>
             {loading ? 'Speichern...' : 'Zuweisen'}
           </button>
           {!slot.filament_type && (
-            <button onClick={() => setAssigning(false)}
-              className="w-full text-xs text-gray-500 hover:text-gray-700">
-              Abbrechen
-            </button>
+            <button onClick={() => setAssigning(false)} style={{ fontSize: 11, color: 'var(--text3)', background: 'none', border: 'none', cursor: 'pointer' }}>Abbrechen</button>
           )}
         </div>
       )}
 
       {!assigning && !slot.filament_type && (
         <button onClick={() => setAssigning(true)} disabled={loading}
-          className="w-full text-xs border border-blue-300 text-blue-600 hover:bg-blue-50 rounded-lg py-1.5 font-medium">
+          style={{ width: '100%', fontSize: 11, padding: '5px 0', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--lime)', background: 'transparent', color: 'var(--lime-dark)', fontWeight: 600 }}>
           Filament zuweisen
         </button>
       )}
 
-      {msg && <p className="text-xs text-red-600 mt-1">{msg}</p>}
+      {msg && <p style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{msg}</p>}
     </div>
   )
 }
@@ -371,77 +433,70 @@ export default function FilamentTab() {
     }
   }
 
-  // Slots nach Drucker gruppieren
   const slotsByPrinter: Record<string, SlotInfo[]> = {}
   for (const slot of slots) {
     if (!slotsByPrinter[slot.printer_id]) slotsByPrinter[slot.printer_id] = []
     slotsByPrinter[slot.printer_id].push(slot)
   }
 
-  if (loading) return <div className="text-sm text-gray-400 py-8 text-center">Lade Filament-Daten...</div>
+  if (loading) return <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '32px 0' }}>Lade Filament-Daten...</div>
 
   return (
-    <div className="space-y-8">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
       {/* Filament-Typen */}
       <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-semibold text-gray-800">Filament-Typen</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>Filament-Typen</h2>
           <button
             onClick={() => { setEditingType(undefined); setShowModal(true) }}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg"
+            className="btn-lime"
+            style={{ padding: '7px 14px', fontSize: 13 }}
           >
             + Neues Filament
           </button>
         </div>
 
         {types.length === 0 ? (
-          <p className="text-sm text-gray-400">Noch keine Filament-Typen angelegt.</p>
+          <p style={{ fontSize: 13, color: 'var(--text3)' }}>Noch keine Filament-Typen angelegt.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
               <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-200 text-xs">
-                  <th className="pb-2 font-medium">Name</th>
-                  <th className="pb-2 font-medium">Material</th>
-                  <th className="pb-2 font-medium">Farbe</th>
-                  <th className="pb-2 font-medium">Spule</th>
-                  <th className="pb-2 font-medium">Preis/g</th>
-                  <th className="pb-2 font-medium">Lager</th>
-                  <th className="pb-2 font-medium"></th>
+                <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                  {['Name', 'Material', 'Farbe', 'Spule', 'Preis/g', 'Lager', ''].map(h => (
+                    <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody>
                 {types.map(ft => (
-                  <tr key={ft.id} className={`hover:bg-gray-50 ${ft.low_stock ? 'bg-yellow-50' : ''}`}>
-                    <td className="py-2 font-medium text-gray-900">{ft.name}</td>
-                    <td className="py-2 text-gray-600">{ft.material}</td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
+                  <tr key={ft.id} style={{ borderBottom: '0.5px solid var(--border)', background: ft.low_stock ? 'var(--amber-bg)' : 'transparent' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--text)' }}>{ft.name}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text2)' }}>{ft.material}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {ft.color_hex && (
-                          <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0"
-                            style={{ backgroundColor: ft.color_hex }} />
+                          <div style={{ width: 14, height: 14, borderRadius: '50%', border: '0.5px solid var(--border)', flexShrink: 0, background: ft.color_hex }} />
                         )}
-                        <span className="text-gray-600">{ft.color_name ?? '—'}</span>
+                        <span style={{ color: 'var(--text2)' }}>{ft.color_name ?? '—'}</span>
                       </div>
                     </td>
-                    <td className="py-2 text-gray-600">{ft.weight_per_spool_g}g</td>
-                    <td className="py-2 text-gray-800 font-medium">{ft.price_per_gram_cents} Ct</td>
-                    <td className="py-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        ft.low_stock ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-600'
-                      }`}>
+                    <td style={{ padding: '8px 12px', color: 'var(--text2)', fontFamily: 'var(--mono)', fontSize: 12 }}>{ft.weight_per_spool_g}g</td>
+                    <td style={{ padding: '8px 12px', fontWeight: 700, fontFamily: 'var(--mono)', fontSize: 12 }}>{ft.price_per_gram_cents} Ct</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: ft.low_stock ? 'var(--amber-bg)' : 'var(--surface2)', color: ft.low_stock ? 'var(--amber)' : 'var(--text3)', border: ft.low_stock ? '0.5px solid var(--amber)' : 'none' }}>
                         {ft.stock_count} Spulen
                       </span>
                     </td>
-                    <td className="py-2">
-                      <div className="flex gap-2">
+                    <td style={{ padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', gap: 8 }}>
                         <button onClick={() => { setEditingType(ft); setShowModal(true) }}
-                          className="text-xs text-blue-600 hover:underline">
+                          style={{ fontSize: 12, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                           Bearbeiten
                         </button>
                         <button onClick={() => { setDeleteConfirm(ft.id); setDeleteError('') }}
-                          className="text-xs text-red-500 hover:underline">
+                          style={{ fontSize: 12, color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                           Löschen
                         </button>
                       </div>
@@ -456,10 +511,10 @@ export default function FilamentTab() {
 
       {/* Drucker-Slots */}
       <div>
-        <h2 className="font-semibold text-gray-800 mb-4">Drucker-Slots</h2>
+        <h2 style={{ fontSize: 14, fontWeight: 800, margin: '0 0 14px' }}>Drucker-Slots</h2>
         {Object.entries(slotsByPrinter).map(([printerId, printerSlots]) => (
-          <div key={printerId} className="mb-6">
-            <p className="text-sm font-medium text-gray-600 mb-3">
+          <div key={printerId} style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text2)', margin: '0 0 10px' }}>
               {printerSlots[0]?.printer_name ?? printerId}
             </p>
             <div className={`grid gap-3 ${printerSlots.length > 1 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-1 max-w-xs'}`}>
@@ -476,7 +531,6 @@ export default function FilamentTab() {
         ))}
       </div>
 
-      {/* Filament-Modal */}
       {showModal && (
         <FilamentModal
           initial={editingType}
@@ -485,22 +539,21 @@ export default function FilamentTab() {
         />
       )}
 
-      {/* Löschen-Bestätigung */}
       {deleteConfirm !== null && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">Filament-Typ löschen?</h3>
-            <p className="text-sm text-gray-500 mb-4">
+          <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 400, width: '100%', padding: 24 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 6px' }}>Filament-Typ löschen?</h3>
+            <p style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 14 }}>
               Dieser Filament-Typ wird dauerhaft gelöscht. Slots müssen vorher geleert werden.
             </p>
-            {deleteError && <p className="text-xs text-red-600 mb-3">{deleteError}</p>}
-            <div className="flex gap-3">
+            {deleteError && <p style={{ fontSize: 12, color: 'var(--red)', marginBottom: 10 }}>{deleteError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => deleteType(deleteConfirm)}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg">
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Löschen
               </button>
               <button onClick={() => { setDeleteConfirm(null); setDeleteError('') }}
-                className="flex-1 border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm font-medium py-2 rounded-lg">
+                className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>
                 Abbrechen
               </button>
             </div>

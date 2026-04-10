@@ -66,37 +66,33 @@ export default function FilesTab() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
         <input
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="E-Mail oder Dateiname suchen..."
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+          className="input-lime"
+          style={{ fontSize: 12, width: 240 }}
         />
-        <span className="text-sm text-gray-500 ml-auto">
+        <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto' }}>
           {files.length} Dateien · {formatBytes(totalSize)} gesamt
         </span>
-        <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        <button onClick={load} style={{ fontSize: 12, color: 'var(--lime-dark)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Aktualisieren</button>
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-400">Laden...</p>
+        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Laden...</p>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400">Keine Dateien gefunden.</p>
+        <p style={{ fontSize: 13, color: 'var(--text3)' }}>Keine Dateien gefunden.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200">
-                <th className="pb-2 font-medium">Nutzer</th>
-                <th className="pb-2 font-medium">Datei</th>
-                <th className="pb-2 font-medium">Größe</th>
-                <th className="pb-2 font-medium">Dauer</th>
-                <th className="pb-2 font-medium">Filament</th>
-                <th className="pb-2 font-medium">Profil</th>
-                <th className="pb-2 font-medium">Hochgeladen</th>
-                <th className="pb-2 font-medium">Aktionen</th>
+              <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                {['Nutzer', 'Datei', 'Größe', 'Dauer', 'Filament', 'Profil', 'Hochgeladen', 'Aktionen'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -104,45 +100,45 @@ export default function FilesTab() {
                 const dur = formatDuration(f.duration_seconds)
                 const filG = totalFilament(f.filament_usage)
                 return (
-                  <tr key={f.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-2 text-gray-700 font-medium">{f.user_email}</td>
-                    <td className="py-2">
-                      <div className="flex items-center gap-2">
+                  <tr key={f.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--text)' }}>{f.user_email}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {f.thumbnail_b64 ? (
-                          <img src={f.thumbnail_b64} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                          <img src={f.thumbnail_b64} alt="" style={{ width: 30, height: 30, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
                         ) : (
-                          <span className="text-lg">📄</span>
+                          <span style={{ fontSize: 16 }}>📄</span>
                         )}
-                        <span className="text-gray-800 truncate max-w-[180px]">{f.filename}</span>
+                        <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{f.filename}</span>
                       </div>
                     </td>
-                    <td className="py-2 text-gray-600 whitespace-nowrap">{formatBytes(f.size_bytes)}</td>
-                    <td className="py-2 text-gray-600 whitespace-nowrap">{dur ?? '–'}</td>
-                    <td className="py-2 text-gray-600 whitespace-nowrap">{filG ? `${filG} g` : '–'}</td>
-                    <td className="py-2">
+                    <td style={{ padding: '8px 12px', color: 'var(--text3)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 12 }}>{formatBytes(f.size_bytes)}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text3)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 12 }}>{dur ?? '–'}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--text3)', whiteSpace: 'nowrap', fontFamily: 'var(--mono)', fontSize: 12 }}>{filG ? `${filG} g` : '–'}</td>
+                    <td style={{ padding: '8px 12px' }}>
                       {f.profile_signature ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--emerald-bg)', color: 'var(--emerald)' }}>
                           ✓ {f.profile_signature}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600">
+                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--amber-bg)', color: 'var(--amber)' }}>
                           ⚠ Kein Profil
                         </span>
                       )}
                     </td>
-                    <td className="py-2 text-gray-500 whitespace-nowrap">{formatDate(f.uploaded_at)}</td>
-                    <td className="py-2">
-                      <div className="flex gap-1.5">
+                    <td style={{ padding: '8px 12px', color: 'var(--text3)', whiteSpace: 'nowrap', fontSize: 12 }}>{formatDate(f.uploaded_at)}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
                         <a
                           href={`/api/admin/files/${f.id}/download`}
                           download={f.filename}
-                          className="text-xs px-2.5 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, border: '0.5px solid var(--blue)', color: 'var(--blue)', textDecoration: 'none' }}
                         >
                           ↓
                         </a>
                         <button
                           onClick={() => setDeleteId(f.id)}
-                          className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50"
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--red)', background: 'transparent', color: 'var(--red)' }}
                         >
                           Löschen
                         </button>
@@ -159,24 +155,19 @@ export default function FilesTab() {
       {/* Löschen-Modal */}
       {deleteId !== null && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">Datei löschen</h3>
-            <p className="text-sm text-gray-600 mb-1">
+          <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 400, width: '100%', padding: 24 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 6px' }}>Datei löschen</h3>
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 4px' }}>
               {files.find(f => f.id === deleteId)?.filename}
             </p>
-            <p className="text-sm text-gray-500 mb-5">
+            <p style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 20 }}>
               von {files.find(f => f.id === deleteId)?.user_email} – wirklich löschen?
             </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm"
-              >
-                Abbrechen
-              </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setDeleteId(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
               <button
                 onClick={() => deleteFile(deleteId)}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-medium"
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Löschen
               </button>

@@ -14,56 +14,66 @@ import SlicerProfilesTab from './SlicerProfilesTab'
 
 type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'filament' | 'profiles' | 'email' | 'settings'
 
+const TABS: [Tab, string][] = [
+  ['stats',        'Statistik'     ],
+  ['users',        'Nutzer'        ],
+  ['vouchers',     'Gutscheine'    ],
+  ['topup',        'Aufladung'     ],
+  ['transactions', 'Finanzen'      ],
+  ['activity',     'Aktivität'     ],
+  ['files',        'Dateien'       ],
+  ['printers',     'Drucker'       ],
+  ['filament',     'Filament'      ],
+  ['profiles',     'Slicer-Profile'],
+  ['email',        'E-Mail'        ],
+  ['settings',     'Einstellungen' ],
+]
+
 export default function AdminPanel() {
   const [tab, setTab] = useState<Tab>('stats')
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Admin-Panel</h1>
+      <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.04em', margin: '0 0 16px' }}>Admin-Panel</h1>
 
-      {/* Tab-Navigation */}
-      <div className="flex flex-wrap border-b border-gray-200 mb-6">
-        {([
-          ['stats', 'Statistik'],
-          ['users', 'Nutzer'],
-          ['vouchers', 'Gutscheine'],
-          ['topup', 'Aufladung'],
-          ['transactions', 'Finanzen'],
-          ['activity', 'Aktivität'],
-          ['files', 'Dateien'],
-          ['printers', 'Drucker'],
-          ['filament', 'Filament'],
-          ['profiles', 'Slicer-Profile'],
-          ['email', 'E-Mail'],
-          ['settings', 'Einstellungen'],
-        ] as [Tab, string][]).map(([key, label]) => (
+      {/* Pill tab bar */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, background: 'var(--surface2)', borderRadius: 12, padding: 4, marginBottom: 16 }}>
+        {TABS.map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === key
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            style={{
+              padding: '5px 12px',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: tab === key ? 700 : 500,
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              background: tab === key ? '#111' : 'transparent',
+              color: tab === key ? '#fff' : 'var(--text2)',
+              transition: 'all 0.15s',
+            }}
           >
             {label}
           </button>
         ))}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        {tab === 'stats' && <StatsTab />}
-        {tab === 'users' && <UsersTab />}
-        {tab === 'vouchers' && <VouchersTab />}
-        {tab === 'topup' && <TopupRequestsTab />}
+      {/* Content */}
+      <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: 24 }}>
+        {tab === 'stats'        && <StatsTab />}
+        {tab === 'users'        && <UsersTab />}
+        {tab === 'vouchers'     && <VouchersTab />}
+        {tab === 'topup'        && <TopupRequestsTab />}
         {tab === 'transactions' && <TransactionsTab />}
-        {tab === 'activity' && <ActivityTab />}
-        {tab === 'files' && <FilesTab />}
-        {tab === 'printers' && <PrintersTab />}
-        {tab === 'filament' && <FilamentTab />}
-        {tab === 'profiles' && <SlicerProfilesTab />}
-        {tab === 'email' && <EmailConfigTab />}
-        {tab === 'settings' && <PortalSettingsTab />}
+        {tab === 'activity'     && <ActivityTab />}
+        {tab === 'files'        && <FilesTab />}
+        {tab === 'printers'     && <PrintersTab />}
+        {tab === 'filament'     && <FilamentTab />}
+        {tab === 'profiles'     && <SlicerProfilesTab />}
+        {tab === 'email'        && <EmailConfigTab />}
+        {tab === 'settings'     && <PortalSettingsTab />}
       </div>
     </div>
   )

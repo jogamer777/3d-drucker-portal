@@ -15,7 +15,7 @@ from app.routers.user import get_current_user
 router = APIRouter(tags=["slicer-profiles"])
 
 PROFILES_DIR = "/home/fj/3d-drucker-portal/uploads/slicer-profiles"
-ALLOWED_EXTENSIONS = {".ini", ".json", ".toml", ".3mf", ".zip", ".cfg"}
+ALLOWED_EXTENSIONS = {".ini", ".json", ".toml", ".3mf", ".zip", ".cfg", ".creality_slicer"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 

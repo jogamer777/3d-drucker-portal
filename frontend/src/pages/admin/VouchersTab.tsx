@@ -24,11 +24,8 @@ export default function VouchersTab() {
   const [filter, setFilter] = useState<'all' | 'open' | 'redeemed' | 'cancelled'>('all')
   const [actionLoading, setActionLoading] = useState<number | null>(null)
 
-  // Wert-ändern Modal
   const [editModal, setEditModal] = useState<Voucher | null>(null)
   const [editValue, setEditValue] = useState('')
-
-  // Löschen Modal
   const [deleteModal, setDeleteModal] = useState<Voucher | null>(null)
 
   const load = () => {
@@ -120,62 +117,72 @@ export default function VouchersTab() {
     iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }) : '–'
 
   const statusBadge = (v: Voucher) => {
-    if (v.status === 'open') return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Offen</span>
-    if (v.status === 'redeemed') return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Eingelöst</span>
-    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">Gesperrt</span>
+    if (v.status === 'open') return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--blue-bg)', color: 'var(--blue)' }}>Offen</span>
+    if (v.status === 'redeemed') return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--surface2)', color: 'var(--text3)' }}>Eingelöst</span>
+    return <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, fontWeight: 700, background: 'var(--red-bg)', color: 'var(--red)' }}>Gesperrt</span>
   }
 
   const filtered = vouchers.filter(v => filter === 'all' || v.status === filter)
   const openVouchers = vouchers.filter(v => v.status === 'open')
 
+  const pillBtn = (active: boolean, onClick: () => void, label: string) => (
+    <button
+      onClick={onClick}
+      style={{ padding: '4px 12px', fontSize: 12, borderRadius: 20, cursor: 'pointer', fontFamily: 'inherit', border: 'none', background: active ? '#111' : 'var(--surface2)', color: active ? '#fff' : 'var(--text2)', fontWeight: active ? 700 : 500 }}
+    >{label}</button>
+  )
+
+  const modalStyle = { background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', maxWidth: 400, width: '100%', padding: 24 }
+
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Erstellen */}
-      <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Gutscheine erstellen</h3>
-        <form onSubmit={createVouchers} className="flex flex-wrap gap-3 items-end">
+      <div style={{ background: 'var(--surface2)', borderRadius: 12, padding: '14px 16px', border: '0.5px solid var(--border)' }}>
+        <h3 style={{ fontSize: 13, fontWeight: 800, margin: '0 0 12px' }}>Gutscheine erstellen</h3>
+        <form onSubmit={createVouchers} style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end' }}>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Wert</label>
-            <div className="flex gap-1">
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Wert</label>
+            <div style={{ display: 'flex', gap: 4 }}>
               {PRESET_VALUES.map(v => (
                 <button key={v} type="button"
                   onClick={() => { setValueCents(v); setCustomValue('') }}
-                  className={`px-3 py-1.5 rounded border text-sm font-medium transition-colors ${
-                    effectiveValue === v && !customValue
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
+                  style={{
+                    padding: '5px 10px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+                    border: effectiveValue === v && !customValue ? '1.5px solid var(--lime)' : '0.5px solid var(--border)',
+                    background: effectiveValue === v && !customValue ? 'var(--lime-bg)' : '#fff',
+                    fontWeight: effectiveValue === v && !customValue ? 800 : 500,
+                  }}
                 >{formatBalance(v)}</button>
               ))}
               <input type="number" value={customValue} onChange={e => setCustomValue(e.target.value)}
                 placeholder="Betrag €" min="0.01" step="0.01"
-                className="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm"
+                className="input-lime" style={{ width: 90, fontSize: 12 }}
               />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Anzahl (1–100)</label>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Anzahl (1–100)</label>
             <input type="number" value={count}
               onChange={e => setCount(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-              min={1} max={100} className="w-20 border border-gray-300 rounded px-2 py-1.5 text-sm"
+              min={1} max={100} className="input-lime" style={{ width: 70, fontSize: 12 }}
             />
           </div>
-          <button type="submit" disabled={creating || effectiveValue <= 0}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
-          >{creating ? 'Erstelle...' : 'Erstellen'}</button>
+          <button type="submit" disabled={creating || effectiveValue <= 0} className="btn-lime" style={{ padding: '8px 16px', fontSize: 13 }}>
+            {creating ? 'Erstelle...' : 'Erstellen'}
+          </button>
         </form>
 
         {newVouchers.length > 0 && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-green-800">{newVouchers.length} Code(s) erstellt</p>
+          <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--emerald-bg)', border: '0.5px solid var(--emerald)', borderRadius: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--emerald)', margin: 0 }}>{newVouchers.length} Code(s) erstellt</p>
               <button onClick={() => printVouchers(newVouchers)}
-                className="text-xs bg-green-700 hover:bg-green-800 text-white px-3 py-1 rounded"
+                style={{ fontSize: 11, background: 'var(--emerald)', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit' }}
               >🖨️ Drucken</button>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {newVouchers.map(v => (
-                <code key={v.id} className="bg-white border border-green-300 rounded px-2 py-1 text-sm font-mono">
+                <code key={v.id} style={{ background: '#fff', border: '0.5px solid var(--emerald)', borderRadius: 6, padding: '3px 8px', fontSize: 12, fontFamily: 'var(--mono)' }}>
                   {v.code} ({formatBalance(v.value_cents)})
                 </code>
               ))}
@@ -186,90 +193,61 @@ export default function VouchersTab() {
 
       {/* Liste */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex gap-2 flex-wrap">
-            {([
-              ['all', `Alle (${vouchers.length})`],
-              ['open', `Offen (${openVouchers.length})`],
-              ['redeemed', `Eingelöst (${vouchers.filter(v => v.status === 'redeemed').length})`],
-              ['cancelled', `Gesperrt (${vouchers.filter(v => v.status === 'cancelled').length})`],
-            ] as const).map(([f, label]) => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  filter === f ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >{label}</button>
-            ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {pillBtn(filter === 'all', () => setFilter('all'), `Alle (${vouchers.length})`)}
+            {pillBtn(filter === 'open', () => setFilter('open'), `Offen (${openVouchers.length})`)}
+            {pillBtn(filter === 'redeemed', () => setFilter('redeemed'), `Eingelöst (${vouchers.filter(v => v.status === 'redeemed').length})`)}
+            {pillBtn(filter === 'cancelled', () => setFilter('cancelled'), `Gesperrt (${vouchers.filter(v => v.status === 'cancelled').length})`)}
           </div>
           {openVouchers.length > 0 && (
             <button onClick={() => printVouchers(openVouchers)}
-              className="text-xs border border-gray-300 px-3 py-1 rounded hover:bg-gray-50 text-gray-700"
+              className="btn-secondary" style={{ fontSize: 11, padding: '5px 10px' }}
             >🖨️ Alle offenen drucken</button>
           )}
         </div>
 
-        {loading ? <p className="text-sm text-gray-400">Laden...</p> : (
-          <table className="w-full text-sm">
+        {loading ? <p style={{ fontSize: 13, color: 'var(--text3)' }}>Laden...</p> : (
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200">
-                <th className="pb-2 font-medium">Code</th>
-                <th className="pb-2 font-medium">Wert</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium">Eingelöst von</th>
-                <th className="pb-2 font-medium">Datum</th>
-                <th className="pb-2 font-medium">Aktionen</th>
+              <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
+                {['Code', 'Wert', 'Status', 'Eingelöst von', 'Datum', 'Aktionen'].map(h => (
+                  <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map(v => (
-                <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-2 font-mono text-gray-800">{v.code}</td>
-                  <td className="py-2 font-medium text-gray-900">{formatBalance(v.value_cents)}</td>
-                  <td className="py-2">{statusBadge(v)}</td>
-                  <td className="py-2 text-gray-500">{v.redeemed_by_email ?? '–'}</td>
-                  <td className="py-2 text-gray-500">{formatDate(v.redeemed_at ?? v.created_at)}</td>
-                  <td className="py-2">
-                    <div className="flex gap-1">
+                <tr key={v.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                  <td style={{ padding: '8px 12px', fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text)' }}>{v.code}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatBalance(v.value_cents)}</td>
+                  <td style={{ padding: '8px 12px' }}>{statusBadge(v)}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12 }}>{v.redeemed_by_email ?? '–'}</td>
+                  <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12 }}>{formatDate(v.redeemed_at ?? v.created_at)}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    <div style={{ display: 'flex', gap: 4 }}>
                       {v.status === 'open' && (
                         <>
-                          <button
-                            onClick={() => { setEditModal(v); setEditValue((v.value_cents / 100).toFixed(2)) }}
-                            disabled={actionLoading === v.id}
-                            className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
-                          >Wert</button>
-                          <button
-                            onClick={() => patchVoucher(v.id, { status: 'cancelled' })}
-                            disabled={actionLoading === v.id}
-                            className="text-xs px-2 py-1 rounded border border-orange-300 text-orange-700 hover:bg-orange-50"
-                          >Sperren</button>
-                          <button
-                            onClick={() => setDeleteModal(v)}
-                            disabled={actionLoading === v.id}
-                            className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50"
-                          >Löschen</button>
+                          <button onClick={() => { setEditModal(v); setEditValue((v.value_cents / 100).toFixed(2)) }} disabled={actionLoading === v.id}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--border)', background: 'transparent', color: 'var(--text2)' }}>Wert</button>
+                          <button onClick={() => patchVoucher(v.id, { status: 'cancelled' })} disabled={actionLoading === v.id}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--amber)', background: 'transparent', color: 'var(--amber)' }}>Sperren</button>
+                          <button onClick={() => setDeleteModal(v)} disabled={actionLoading === v.id}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--red)', background: 'transparent', color: 'var(--red)' }}>Löschen</button>
                         </>
                       )}
                       {v.status === 'cancelled' && (
                         <>
-                          <button
-                            onClick={() => patchVoucher(v.id, { status: 'open' })}
-                            disabled={actionLoading === v.id}
-                            className="text-xs px-2 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50"
-                          >Entsperren</button>
-                          <button
-                            onClick={() => setDeleteModal(v)}
-                            disabled={actionLoading === v.id}
-                            className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50"
-                          >Löschen</button>
+                          <button onClick={() => patchVoucher(v.id, { status: 'open' })} disabled={actionLoading === v.id}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--emerald)', background: 'transparent', color: 'var(--emerald)' }}>Entsperren</button>
+                          <button onClick={() => setDeleteModal(v)} disabled={actionLoading === v.id}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--red)', background: 'transparent', color: 'var(--red)' }}>Löschen</button>
                         </>
                       )}
                       {v.status === 'redeemed' && (
-                        <button
-                          onClick={() => patchVoucher(v.id, { status: 'open' })}
-                          disabled={actionLoading === v.id}
+                        <button onClick={() => patchVoucher(v.id, { status: 'open' })} disabled={actionLoading === v.id}
                           title="Guthaben wird NICHT automatisch angepasst"
-                          className="text-xs px-2 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
-                        >Zurücksetzen</button>
+                          style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', border: '0.5px solid var(--blue)', background: 'transparent', color: 'var(--blue)' }}>Zurücksetzen</button>
                       )}
                     </div>
                   </td>
@@ -283,21 +261,15 @@ export default function VouchersTab() {
       {/* Wert-ändern Modal */}
       {editModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-1">Wert ändern</h3>
-            <p className="text-xs font-mono text-gray-500 mb-4">{editModal.code}</p>
-            <label className="block text-xs text-gray-500 mb-1">Neuer Wert (€)</label>
-            <input type="number" value={editValue} onChange={e => setEditValue(e.target.value)}
-              min="0.01" step="0.01"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="flex gap-2">
-              <button onClick={() => setEditModal(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm">Abbrechen</button>
-              <button onClick={saveEditValue}
-                disabled={!editValue || parseFloat(editValue) <= 0}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-lg py-2 text-sm font-medium"
-              >Speichern</button>
+          <div style={modalStyle}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Wert ändern</h3>
+            <p style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', margin: '0 0 14px' }}>{editModal.code}</p>
+            <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Neuer Wert (€)</label>
+            <input type="number" value={editValue} onChange={e => setEditValue(e.target.value)} min="0.01" step="0.01"
+              className="input-lime" style={{ marginBottom: 16 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setEditModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
+              <button onClick={saveEditValue} disabled={!editValue || parseFloat(editValue) <= 0} className="btn-lime" style={{ flex: 1, padding: '9px 0' }}>Speichern</button>
             </div>
           </div>
         </div>
@@ -306,16 +278,14 @@ export default function VouchersTab() {
       {/* Löschen Modal */}
       {deleteModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-semibold text-gray-900 mb-2">Code löschen</h3>
-            <p className="text-xs font-mono text-gray-600 mb-3">{deleteModal.code}</p>
-            <p className="text-sm text-red-600 mb-5">Dieser Code wird endgültig gelöscht und kann nicht wiederhergestellt werden.</p>
-            <div className="flex gap-2">
-              <button onClick={() => setDeleteModal(null)}
-                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm">Abbrechen</button>
-              <button onClick={deleteVoucher}
-                disabled={actionLoading === deleteModal.id}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg py-2 text-sm font-medium"
+          <div style={modalStyle}>
+            <h3 style={{ fontSize: 15, fontWeight: 800, margin: '0 0 4px' }}>Code löschen</h3>
+            <p style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', margin: '0 0 10px' }}>{deleteModal.code}</p>
+            <p style={{ fontSize: 13, color: 'var(--red)', marginBottom: 20 }}>Dieser Code wird endgültig gelöscht und kann nicht wiederhergestellt werden.</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setDeleteModal(null)} className="btn-secondary" style={{ flex: 1, padding: '9px 0' }}>Abbrechen</button>
+              <button onClick={deleteVoucher} disabled={actionLoading === deleteModal.id}
+                style={{ flex: 1, background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 10, padding: '9px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
               >Löschen</button>
             </div>
           </div>
