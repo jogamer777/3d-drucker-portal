@@ -12,9 +12,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.models import User, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus, Transaction, TransactionType, GCodeFile
 from app.routers.user import get_current_user
-from app.core.printer_client import get_all_printers, get_printer_status, send_moonraker_command, send_printer_command, upload_and_start_print, PRINTERS
+from app.core.printer_client import get_all_printers, get_printer_status, send_moonraker_command, send_printer_command, upload_and_start_print, PRINTERS, PRINTER_MAX_DURATION_SECONDS
 from app.core.queue_logic import get_active_occupation, get_queue_position
-from app.core.print_rates import calculate_cost
+from app.core.print_rates import calculate_cost, MM_TO_GRAMS_175
 
 router = APIRouter(prefix="/api/printers", tags=["printers"])
 
@@ -38,6 +38,9 @@ def _enrich(status: dict, db: Session, user_id: int) -> dict:
             "pickup_seconds_remaining": pickup_secs,
             "user_display": occ_user.email.split("@")[0] if occ_user else "Unbekannt",
             "user_email": occ_user.email if occ_user else None,
+            "file_id": occ.file_id,
+            "estimated_cost_cents": occ.estimated_cost_cents,
+            "charged_cost_cents": occ.charged_cost_cents,
         }
     else:
         status["occupation"] = None
@@ -184,10 +187,45 @@ def control_printer(
     if printer_id not in PRINTERS:
         raise HTTPException(404, "Drucker nicht gefunden")
 
+    # Anteilige Rückerstattung bei Abbruch
+    refund_cents = 0
+    if body.action == "cancel":
+        occ = get_active_occupation(db, printer_id)
+        if occ and occ.charged_cost_cents and occ.charged_cost_cents > 0:
+            status = get_printer_status(printer_id)
+            cfg_api = PRINTERS[printer_id]["api"]
+
+            if cfg_api == "moonraker" and status:
+                # Tatsächlich verbrauchtes Filament aus Moonraker
+                filament_mm = float(status.get("filament_used_mm", 0))
+                actual_filament_g = filament_mm * MM_TO_GRAMS_175
+                actual_elapsed = int(status.get("elapsed_seconds", 0))
+                actual_cost = calculate_cost(actual_elapsed, actual_filament_g)
+            else:
+                # OctoPrint: kein Filament-Tracking → 50% Erstattung wenn < 50% Fortschritt
+                progress = float(status.get("progress", 0)) if status else 0.0
+                if progress < 0.5:
+                    actual_cost = occ.charged_cost_cents // 2
+                else:
+                    actual_cost = occ.charged_cost_cents
+
+            refund_cents = max(0, occ.charged_cost_cents - actual_cost)
+            if refund_cents > 0:
+                user = db.query(User).filter(User.id == occ.user_id).first()
+                if user:
+                    user.balance_cents += refund_cents
+                    db.add(Transaction(
+                        user_id=occ.user_id,
+                        type=TransactionType.refund,
+                        amount_cents=refund_cents,
+                        description=f"Erstattung nach Abbruch (Drucker {printer_id})",
+                    ))
+                    db.commit()
+
     ok = send_printer_command(printer_id, body.action)
     if not ok:
         raise HTTPException(500, "Steuerbefehl fehlgeschlagen – Drucker erreichbar?")
-    return {"ok": True}
+    return {"ok": True, "refund_cents": refund_cents}
 
 
 def _parse_filament_grams(json_str: str | None) -> float:
@@ -203,6 +241,11 @@ def _parse_filament_grams(json_str: str | None) -> float:
 
 class StartPrintRequest(BaseModel):
     file_id: int
+    # Power-User Einstellungen (optional, nur für power_user/admin)
+    temp_hotend: int | None = None    # °C, z.B. 215
+    temp_bed: int | None = None       # °C, z.B. 60
+    speed_percent: int | None = None  # 50–200
+    flow_percent: int | None = None   # 50–150
 
 
 @router.post("/{printer_id}/start")
@@ -229,6 +272,16 @@ def start_print(
     safe_filepath = os.path.abspath(gfile.filepath)
     if not safe_filepath.startswith(os.path.abspath(_upload_root) + os.sep):
         raise HTTPException(403, "Zugriff verweigert")
+
+    # 2.5. Druckdauer-Limit prüfen
+    max_dur = PRINTER_MAX_DURATION_SECONDS.get(printer_id)
+    if max_dur and gfile.duration_seconds and gfile.duration_seconds > max_dur:
+        max_h = max_dur // 3600
+        est_h = round(gfile.duration_seconds / 3600, 1)
+        raise HTTPException(
+            400,
+            f"Druck zu lang: {est_h}h geschätzt, maximal {max_h}h für diesen Drucker erlaubt"
+        )
 
     # 3. Kosten berechnen
     filament_grams = _parse_filament_grams(gfile.filament_usage)
@@ -260,6 +313,34 @@ def start_print(
     occ.estimated_cost_cents = cost
     occ.charged_cost_cents = cost
     db.commit()
+
+    # 8. Power-User Einstellungen anwenden (nur Moonraker, nur power_user/admin)
+    is_power = current_user.role.value in ("admin", "power_user")
+    if is_power and PRINTERS.get(printer_id, {}).get("api") == "moonraker":
+        import urllib.request as _ureq
+        _base = PRINTERS[printer_id]["url"]
+
+        def _send_gcode(cmd: str) -> None:
+            try:
+                req = _ureq.Request(
+                    f"{_base}/printer/gcode/script",
+                    data=f'{{"script": "{cmd}"}}'.encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with _ureq.urlopen(req, timeout=5):
+                    pass
+            except Exception:
+                pass  # Fehler bei Einstellungen sind nicht druckkritisch
+
+        if body.speed_percent is not None:
+            _send_gcode(f"M220 S{body.speed_percent}")
+        if body.flow_percent is not None:
+            _send_gcode(f"M221 S{body.flow_percent}")
+        if body.temp_hotend is not None:
+            _send_gcode(f"M104 S{body.temp_hotend}")
+        if body.temp_bed is not None:
+            _send_gcode(f"M140 S{body.temp_bed}")
 
     return {"ok": True, "charged_cents": cost}
 

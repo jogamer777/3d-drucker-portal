@@ -272,3 +272,9 @@ class ActivityLogOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+# ── Finanz-Reset ──────────────────────────────────────────────────────────────
+
+class FinancialResetRequest(BaseModel):
+    confirm: bool = False

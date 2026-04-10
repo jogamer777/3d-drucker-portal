@@ -161,6 +161,146 @@ def download_file(
     )
 
 
+@router.get("/{file_id}/layers")
+def get_gcode_layers(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Parst G-Code und gibt Layer-Pfade für die Vorschau zurück.
+    Nur Datei-Besitzer oder Admin darf zugreifen.
+    Max. 200 Layer, max. 500 Punkte pro Layer.
+    """
+    is_admin = current_user.role.value in ("admin", "power_user")
+    query = db.query(GCodeFile).filter(GCodeFile.id == file_id)
+    if not is_admin:
+        query = query.filter(GCodeFile.user_id == current_user.id)
+    gfile = query.first()
+    if not gfile:
+        raise HTTPException(404, "Datei nicht gefunden")
+
+    safe_path = os.path.abspath(gfile.filepath)
+    if not safe_path.startswith(os.path.abspath(UPLOAD_ROOT) + os.sep):
+        raise HTTPException(403, "Zugriff verweigert")
+    if not os.path.exists(safe_path):
+        raise HTTPException(404, "Datei nicht auf Disk vorhanden")
+
+    MAX_LAYERS = 200
+    MAX_POINTS = 500
+    MAX_LINES = 2_000_000  # Limit für sehr große Dateien
+
+    layers = []          # Liste von Layer-Punktlisten
+    current_layer = []   # Aktuelle Layer-Punkte
+    x, y, z = 0.0, 0.0, 0.0
+    last_z = None
+    relative = False     # G90=absolut (Standard), G91=relativ
+    line_count = 0
+
+    min_x, max_x = float("inf"), float("-inf")
+    min_y, max_y = float("inf"), float("-inf")
+
+    try:
+        with open(safe_path, "r", encoding="utf-8", errors="ignore") as f:
+            for raw_line in f:
+                line_count += 1
+                if line_count > MAX_LINES:
+                    break
+
+                line = raw_line.strip()
+                if not line or line.startswith(";"):
+                    continue
+
+                # Kommentar abschneiden
+                if ";" in line:
+                    line = line[:line.index(";")].strip()
+                if not line:
+                    continue
+
+                upper = line.upper()
+
+                # Koordinatenmodus
+                if upper.startswith("G90"):
+                    relative = False
+                    continue
+                if upper.startswith("G91"):
+                    relative = True
+                    continue
+
+                # Bewegungsbefehle
+                if upper.startswith("G0 ") or upper.startswith("G1 ") or upper.startswith("G0\t") or upper.startswith("G1\t"):
+                    is_extrude = False
+                    new_x, new_y, new_z = x, y, z
+                    parts = upper.split()
+                    for part in parts[1:]:
+                        if part.startswith("X"):
+                            try:
+                                val = float(part[1:])
+                                new_x = (x + val) if relative else val
+                            except ValueError:
+                                pass
+                        elif part.startswith("Y"):
+                            try:
+                                val = float(part[1:])
+                                new_y = (y + val) if relative else val
+                            except ValueError:
+                                pass
+                        elif part.startswith("Z"):
+                            try:
+                                val = float(part[1:])
+                                new_z = (z + val) if relative else val
+                            except ValueError:
+                                pass
+                        elif part.startswith("E"):
+                            is_extrude = True
+
+                    # Z-Änderung = neuer Layer
+                    if new_z != z and new_z != last_z:
+                        if current_layer:
+                            # Subsampling bei zu vielen Punkten
+                            if len(current_layer) > MAX_POINTS:
+                                step = len(current_layer) // MAX_POINTS
+                                current_layer = current_layer[::step]
+                            layers.append(current_layer)
+                            current_layer = []
+                        last_z = new_z
+                        if len(layers) >= MAX_LAYERS:
+                            break
+
+                    x, y, z = new_x, new_y, new_z
+
+                    # Extrusions-Move aufzeichnen
+                    if is_extrude and upper.startswith("G1"):
+                        current_layer.append({"x": round(x, 2), "y": round(y, 2)})
+                        if x < min_x: min_x = x
+                        if x > max_x: max_x = x
+                        if y < min_y: min_y = y
+                        if y > max_y: max_y = y
+
+    except Exception:
+        raise HTTPException(500, "Fehler beim Parsen der Datei")
+
+    # Letzten Layer nicht vergessen
+    if current_layer:
+        if len(current_layer) > MAX_POINTS:
+            step = len(current_layer) // MAX_POINTS
+            current_layer = current_layer[::step]
+        layers.append(current_layer)
+
+    bounds = {
+        "min_x": min_x if min_x != float("inf") else 0,
+        "max_x": max_x if max_x != float("-inf") else 0,
+        "min_y": min_y if min_y != float("inf") else 0,
+        "max_y": max_y if max_y != float("-inf") else 0,
+    }
+
+    return {
+        "layer_count": len(layers),
+        "layers": layers,
+        "bounds": bounds,
+    }
+
+
 @router.delete("/{file_id}")
 def delete_file(
     file_id: int,

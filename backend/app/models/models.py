@@ -1,7 +1,7 @@
 import enum
 import secrets
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, Enum, BigInteger, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, Enum, BigInteger, DateTime, ForeignKey, Text, Float, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from app.core.config import DEFAULT_STORAGE_LIMIT_BYTES
@@ -158,6 +158,8 @@ class PrinterOccupation(Base):
     file_id              = Column(Integer, ForeignKey("gcode_files.id"), nullable=True)
     estimated_cost_cents = Column(Integer, nullable=True)
     charged_cost_cents   = Column(Integer, nullable=True)
+    actual_filament_g    = Column(Float, nullable=True)  # tatsächlich verbrauchtes Filament
+    slot_id              = Column(Integer, ForeignKey("printer_slots.id"), nullable=True)
 
     user = relationship("User", back_populates="occupations")
 
@@ -232,3 +234,48 @@ class MaintenanceLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     admin = relationship("User", foreign_keys=[admin_id])
+
+
+# ── Filament-Management ────────────────────────────────────────────────────────
+
+class FilamentMaterial(str, enum.Enum):
+    PLA    = "PLA"
+    PETG   = "PETG"
+    ABS    = "ABS"
+    TPU    = "TPU"
+    ASA    = "ASA"
+    OTHER  = "OTHER"
+
+
+class FilamentType(Base):
+    __tablename__ = "filament_types"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    name                 = Column(String, nullable=False)          # z.B. "Prusament PLA Galaxy Black"
+    material             = Column(Enum(FilamentMaterial), default=FilamentMaterial.PLA, nullable=False)
+    color_hex            = Column(String(7), nullable=True)        # "#1A1A1A"
+    color_name           = Column(String, nullable=True)           # "Galaxy Black"
+    weight_per_spool_g   = Column(Integer, nullable=False)         # 1000
+    purchase_price_cents = Column(Integer, nullable=False)         # Gesamtpreis der Spule
+    markup_percent       = Column(Integer, default=20, nullable=False)  # 20 = 20% Aufschlag
+    stock_count          = Column(Integer, default=0, nullable=False)   # Lagerbestand (Spulen)
+    low_stock_threshold  = Column(Integer, default=2, nullable=False)   # Warnung wenn <= Threshold
+    created_at           = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    slots = relationship("PrinterSlot", back_populates="filament_type")
+
+
+class PrinterSlot(Base):
+    __tablename__ = "printer_slots"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    printer_id         = Column(String, nullable=False, index=True)
+    slot_index         = Column(Integer, nullable=False)      # 0–3 für K2, 0 für CRX
+    filament_type_id   = Column(Integer, ForeignKey("filament_types.id"), nullable=True)
+    initial_weight_g   = Column(Integer, nullable=True)       # Gewicht beim Einlegen
+    remaining_weight_g = Column(Integer, nullable=True)       # aktueller Restbestand
+    loaded_at          = Column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("printer_id", "slot_index", name="uq_printer_slot"),)
+
+    filament_type = relationship("FilamentType", back_populates="slots")

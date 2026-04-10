@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
+import GCodeLayerPreview from '../components/GCodeLayerPreview'
 
 interface OccupationInfo {
   id: number
@@ -70,6 +71,11 @@ const STATE_CONFIG: Record<string, { label: string; dot: string; text: string }>
 
 const RATE_PER_HOUR_CENTS = 20
 const RATE_PER_GRAM_CENTS = 5
+
+const PRINTER_MAX_DURATION_SECONDS: Record<string, number> = {
+  k2:  172800,  // 48h
+  crx: 345600,  // 96h
+}
 
 function parseFilamentGrams(s: string | null): number {
   if (!s) return 0
@@ -142,12 +148,21 @@ function StartPrintModal({
   userBalanceCents: number
   onClose: () => void
   onStarted: () => void
+  isAdmin: boolean
 }) {
   const [files, setFiles] = useState<GCodeFileInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<GCodeFileInfo | null>(null)
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [tempHotend, setTempHotend] = useState('')
+  const [tempBed, setTempBed] = useState('')
+  const [speedPercent, setSpeedPercent] = useState('')
+  const [flowPercent, setFlowPercent] = useState('')
+
+  const maxDuration = PRINTER_MAX_DURATION_SECONDS[printerId]
+  const exceedsDurationLimit = !!(selected?.duration_seconds && maxDuration && selected.duration_seconds > maxDuration)
 
   useEffect(() => {
     api.get('/files').then(r => setFiles(r.data)).catch(() => setError('Dateien konnten nicht geladen werden.')).finally(() => setLoading(false))
@@ -158,7 +173,14 @@ function StartPrintModal({
     setStarting(true)
     setError('')
     try {
-      await api.post(`/printers/${printerId}/start`, { file_id: selected.id })
+      const body: Record<string, unknown> = { file_id: selected.id }
+      if (isAdmin && showAdvanced) {
+        if (tempHotend) body.temp_hotend = parseInt(tempHotend)
+        if (tempBed) body.temp_bed = parseInt(tempBed)
+        if (speedPercent) body.speed_percent = parseInt(speedPercent)
+        if (flowPercent) body.flow_percent = parseInt(flowPercent)
+      }
+      await api.post(`/printers/${printerId}/start`, body)
       onStarted()
     } catch (e: any) {
       const detail = e.response?.data?.detail ?? 'Fehler beim Starten'
@@ -223,6 +245,59 @@ function StartPrintModal({
           </div>
         )}
 
+        {/* Power-User Einstellungen */}
+        {isAdmin && (
+          <div className="px-5 border-t border-gray-100 pt-3">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
+            >
+              <span>{showAdvanced ? '▾' : '▸'}</span>
+              Erweiterte Einstellungen (Power-User)
+            </button>
+            {showAdvanced && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-gray-500">Hotend-Temp. (°C)</span>
+                  <input
+                    type="number" min={150} max={300} value={tempHotend}
+                    onChange={e => setTempHotend(e.target.value)}
+                    placeholder="Standard"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-gray-500">Bett-Temp. (°C)</span>
+                  <input
+                    type="number" min={0} max={120} value={tempBed}
+                    onChange={e => setTempBed(e.target.value)}
+                    placeholder="Standard"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-gray-500">Geschwindigkeit (%)</span>
+                  <input
+                    type="number" min={50} max={200} value={speedPercent}
+                    onChange={e => setSpeedPercent(e.target.value)}
+                    placeholder="100"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-gray-500">Fluss (%)</span>
+                  <input
+                    type="number" min={50} max={150} value={flowPercent}
+                    onChange={e => setFlowPercent(e.target.value)}
+                    placeholder="100"
+                    className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Footer */}
         <div className="px-5 py-4 border-t border-gray-100 space-y-3">
           {selected && (
@@ -250,11 +325,18 @@ function StartPrintModal({
             </div>
           )}
 
+          {exceedsDurationLimit && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-800">
+              Druck zu lang: {selected?.duration_seconds ? (selected.duration_seconds / 3600).toFixed(1) : '?'}h geschätzt –
+              maximal {maxDuration ? maxDuration / 3600 : '?'}h für diesen Drucker erlaubt.
+            </div>
+          )}
+
           {error && <p className="text-xs text-red-600">{error}</p>}
 
           <button
             onClick={doStart}
-            disabled={!selected || starting || !canAfford}
+            disabled={!selected || starting || !canAfford || exceedsDurationLimit}
             className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium py-2.5 rounded-lg transition-colors"
           >
             {starting ? 'Startet...' : 'Druck starten'}
@@ -298,6 +380,7 @@ export default function PrinterDetail() {
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
+  const [refundCents, setRefundCents] = useState<number | null>(null)
   const [showStartModal, setShowStartModal] = useState(false)
   const [lastMaintenance, setLastMaintenance] = useState<{ action: string; notes: string | null; created_at: string } | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -546,6 +629,16 @@ export default function PrinterDetail() {
                   <span className="text-xs font-medium text-gray-800">{p.layer} / {p.layer_count}</span>
                 </div>
               )}
+              {/* G-Code Layer-Vorschau – nur beim eigenen aktiven Druck */}
+              {iAmOccupying && p.occupation?.file_id && showProgress && (
+                <div className="px-4 py-3 flex justify-center border-t border-gray-100">
+                  <GCodeLayerPreview
+                    fileId={p.occupation.file_id}
+                    currentLayer={p.layer}
+                    layerCount={p.layer_count}
+                  />
+                </div>
+              )}
               {p.z_pos > 0 && (
                 <div className="px-4 py-2.5 flex items-center justify-between">
                   <span className="text-xs text-gray-500">Z-Position</span>
@@ -671,6 +764,7 @@ export default function PrinterDetail() {
         <StartPrintModal
           printerId={id!}
           userBalanceCents={user?.balance_cents ?? 0}
+          isAdmin={isAdmin}
           onClose={() => setShowStartModal(false)}
           onStarted={async () => {
             setShowStartModal(false)
@@ -682,6 +776,15 @@ export default function PrinterDetail() {
             } catch {}
           }}
         />
+      )}
+
+      {/* Erstattungs-Toast */}
+      {refundCents !== null && refundCents > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-green-700 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg flex items-center gap-2">
+          <span>Druck abgebrochen –</span>
+          <span className="font-bold">{(refundCents / 100).toFixed(2)} € erstattet</span>
+          <button onClick={() => setRefundCents(null)} className="ml-2 text-green-200 hover:text-white">&times;</button>
+        </div>
       )}
 
       {/* Bestätigungs-Modal */}
@@ -698,7 +801,20 @@ export default function PrinterDetail() {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => { const a = confirmAction; setConfirmAction(null); control(a) }}
+                onClick={async () => {
+                  const a = confirmAction
+                  setConfirmAction(null)
+                  setRefundCents(null)
+                  try {
+                    const r = await api.post(`/printers/${id}/control`, { action: a })
+                    if (a === 'cancel' && r.data?.refund_cents > 0) {
+                      setRefundCents(r.data.refund_cents)
+                    }
+                    load()
+                  } catch (e: any) {
+                    setActionError(e.response?.data?.detail ?? 'Fehler')
+                  }
+                }}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 rounded-lg"
               >
                 Ja, ausführen

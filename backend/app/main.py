@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base, SessionLocal
-from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations, topup
+from app.routers import auth, user, vouchers, transactions, admin, files, printers, reservations, topup, filament
 
 # Datenbank-Tabellen erstellen (neue Tabellen werden automatisch angelegt)
 Base.metadata.create_all(bind=engine)
@@ -36,6 +36,7 @@ app.include_router(files.router)
 app.include_router(printers.router)
 app.include_router(reservations.router)
 app.include_router(topup.router)
+app.include_router(filament.router)
 
 
 async def _reservation_cleanup_loop():
@@ -54,12 +55,17 @@ async def _reservation_cleanup_loop():
 
 
 def _run_migrations():
-    """SQLite-Migrationen: neue Spalten hinzufügen (idempotent)."""
+    """SQLite-Migrationen: neue Spalten und Tabellen hinzufügen (idempotent)."""
     from sqlalchemy import text
     migrations = [
+        # Bestehende Spalten
         "ALTER TABLE printer_occupations ADD COLUMN file_id INTEGER",
         "ALTER TABLE printer_occupations ADD COLUMN estimated_cost_cents INTEGER",
         "ALTER TABLE printer_occupations ADD COLUMN charged_cost_cents INTEGER",
+        # Filament-Management
+        "ALTER TABLE printer_occupations ADD COLUMN actual_filament_g REAL",
+        "ALTER TABLE printer_occupations ADD COLUMN slot_id INTEGER",
+        # Neue Tabellen werden via Base.metadata.create_all angelegt (oben in startup)
     ]
     for sql in migrations:
         try:

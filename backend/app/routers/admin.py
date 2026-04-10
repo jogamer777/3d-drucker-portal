@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import hash_password
-from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, AdminMessage, ActivityLog, GCodeFile, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus, MaintenanceLog, MAINTENANCE_ACTIONS
+from app.models.models import User, UserRole, Transaction, TransactionType, VoucherCode, VoucherStatus, AdminMessage, ActivityLog, GCodeFile, PrinterOccupation, OccupationStatus, QueueEntry, QueueStatus, MaintenanceLog, MAINTENANCE_ACTIONS, TopupRequest
 from app.core.printer_client import PRINTERS, reload_printer_config, save_printer_config
 from app.core.email import get_email_config, save_email_config, send_email, reload_email_config
 from app.core.portal_config import get_registration_open, set_registration_open, get_portal_url, set_portal_url
@@ -21,7 +21,7 @@ from app.schemas.schemas import MaintenanceLogCreate, MaintenanceLogOut
 from app.schemas.schemas import (
     AdminUserOut, AdminUserUpdate, PasswordResetResponse,
     AdminMessageCreate, AdminMessageOut, AdminTransactionOut, ActivityLogOut,
-    AdminGCodeFileOut,
+    AdminGCodeFileOut, FinancialResetRequest,
 )
 from app.routers.user import require_admin
 
@@ -532,6 +532,183 @@ def export_users(
         content="\ufeff" + output.getvalue(),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="nutzer_{today}.csv"'},
+    )
+
+
+@router.get("/stats/chart")
+def get_stats_chart(
+    period: str = "7d",
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Zeitreihen-Daten für Diagramme.
+    period: 7d | 30d | 90d
+    """
+    from sqlalchemy import func
+    from datetime import timedelta
+
+    days = 30
+    if period == "7d":
+        days = 7
+    elif period == "90d":
+        days = 90
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    # Umsatz pro Tag (charge-Transaktionen, Beträge sind negativ)
+    rev_rows = db.query(
+        func.date(Transaction.created_at).label("day"),
+        func.sum(-Transaction.amount_cents).label("total"),
+    ).filter(
+        Transaction.type == TransactionType.charge,
+        Transaction.created_at >= cutoff,
+    ).group_by(func.date(Transaction.created_at)).order_by("day").all()
+
+    # Drucke pro Tag
+    prints_rows = db.query(
+        func.date(PrinterOccupation.claimed_at).label("day"),
+        func.count(PrinterOccupation.id).label("count"),
+    ).filter(
+        PrinterOccupation.claimed_at >= cutoff,
+        PrinterOccupation.file_id != None,
+    ).group_by(func.date(PrinterOccupation.claimed_at)).order_by("day").all()
+
+    return {
+        "period": period,
+        "revenue_by_day": [{"date": str(r.day), "cents": int(r.total or 0)} for r in rev_rows],
+        "prints_by_day": [{"date": str(r.day), "count": int(r.count)} for r in prints_rows],
+    }
+
+
+@router.post("/financial-reset")
+def financial_reset(
+    body: FinancialResetRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """
+    Setzt alle Guthaben und Finanzdaten zurück.
+    Laufende Druckvorgänge (PrinterOccupation) werden NICHT angefasst.
+    confirm=False → Nur Vorschau (Dry Run).
+    confirm=True  → Tatsächliche Ausführung.
+    """
+    from sqlalchemy import func, text
+
+    users_count = db.query(func.count(User.id)).scalar() or 0
+    tx_count = db.query(func.count(Transaction.id)).scalar() or 0
+    vouchers_reset_count = db.query(func.count(VoucherCode.id)).filter(
+        VoucherCode.status == VoucherStatus.redeemed
+    ).scalar() or 0
+    topup_count = db.query(func.count(TopupRequest.id)).scalar() or 0
+
+    active_occs = db.query(PrinterOccupation).filter(
+        PrinterOccupation.status.in_([OccupationStatus.occupied, OccupationStatus.awaiting_pickup])
+    ).all()
+
+    if not body.confirm:
+        return {
+            "dry_run": True,
+            "users_affected": users_count,
+            "transactions_deleted": tx_count,
+            "vouchers_reset": vouchers_reset_count,
+            "topup_requests_deleted": topup_count,
+            "active_occupations_untouched": len(active_occs),
+        }
+
+    # Ausführung in einer Transaktion
+    db.execute(text("UPDATE users SET balance_cents = 0"))
+    db.execute(text("DELETE FROM transactions"))
+    db.execute(text(
+        "UPDATE voucher_codes SET status = 'open', redeemed_by_id = NULL, redeemed_at = NULL "
+        "WHERE status = 'redeemed'"
+    ))
+    db.execute(text("DELETE FROM topup_requests"))
+
+    db.add(ActivityLog(
+        actor_email=admin.email,
+        action="financial_reset",
+        details=(
+            f"Admin {admin.email} hat alle Finanzdaten zurückgesetzt: "
+            f"{users_count} Nutzer auf 0€, {tx_count} Transaktionen gelöscht, "
+            f"{vouchers_reset_count} Voucher zurückgesetzt, {topup_count} Topup-Anfragen gelöscht"
+        ),
+    ))
+    db.commit()
+
+    return {
+        "dry_run": False,
+        "users_affected": users_count,
+        "transactions_deleted": tx_count,
+        "vouchers_reset": vouchers_reset_count,
+        "topup_requests_deleted": topup_count,
+        "active_occupations_untouched": len(active_occs),
+    }
+
+
+# ── Erweiterte CSV-Exporte ────────────────────────────────────────────────────
+
+@router.get("/occupations/export")
+def export_occupations(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """CSV-Export aller Druckjobs (PrinterOccupations)."""
+    occs = db.query(PrinterOccupation).order_by(PrinterOccupation.claimed_at.desc()).all()
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow([
+        "ID", "Drucker", "Nutzer", "Datei", "Status",
+        "Gestartet", "Abgeschlossen", "Kosten (Cent)", "Kosten (EUR)"
+    ])
+    for occ in occs:
+        filename = ""
+        if occ.file_id:
+            gfile = db.query(GCodeFile).filter(GCodeFile.id == occ.file_id).first()
+            if gfile:
+                filename = gfile.filename
+        writer.writerow([
+            occ.id,
+            occ.printer_id,
+            occ.user.email if occ.user else "",
+            filename,
+            occ.status.value,
+            occ.claimed_at.strftime("%Y-%m-%d %H:%M:%S"),
+            occ.completed_at.strftime("%Y-%m-%d %H:%M:%S") if occ.completed_at else "",
+            occ.charged_cost_cents or 0,
+            f"{(occ.charged_cost_cents or 0) / 100:.2f}".replace(".", ","),
+        ])
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="druckjobs_{today}.csv"'},
+    )
+
+
+@router.get("/activity/export")
+def export_activity(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """CSV-Export des kompletten Aktivitätsprotokolls."""
+    logs = db.query(ActivityLog).order_by(ActivityLog.created_at.desc()).all()
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=";")
+    writer.writerow(["ID", "Nutzer", "Aktion", "Details", "Datum"])
+    for log in logs:
+        writer.writerow([
+            log.id,
+            log.actor_email or "",
+            log.action,
+            log.details or "",
+            log.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        ])
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="aktivitaet_{today}.csv"'},
     )
 
 

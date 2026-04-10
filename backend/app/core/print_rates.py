@@ -8,6 +8,9 @@ RATE_PER_HOUR_CENTS = 20    # 0,20 € pro Stunde
 RATE_PER_GRAM_CENTS = 5     # 0,05 € pro Gramm Filament
 MINIMUM_CENTS = 0           # Mindestgebühr
 
+# Umrechnungsfaktor: mm Filament → Gramm (1,75mm PLA, ρ=1,24 g/cm³)
+MM_TO_GRAMS_175 = 0.002979  # g pro mm
+
 
 def calculate_cost(duration_seconds: int | None, filament_grams: float) -> int:
     """Berechnet Druckkosten in Cent.

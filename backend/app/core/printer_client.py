@@ -29,6 +29,12 @@ PRINTERS: dict[str, dict] = {
     },
 }
 
+# Maximale Druckdauer pro Drucker (in Sekunden)
+PRINTER_MAX_DURATION_SECONDS: dict[str, int] = {
+    "k2":  172800,  # 48 Stunden
+    "crx": 345600,  # 96 Stunden
+}
+
 # Pfad zur persistenten Drucker-Config (API-Keys etc.)
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "printer_config.json")
 _CONFIG_PATH = os.path.normpath(_CONFIG_PATH)

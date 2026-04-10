@@ -78,6 +78,13 @@ export default function ActivityTab() {
           className="ml-auto border border-gray-300 rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
         />
         <button onClick={load} className="text-sm text-blue-600 hover:underline">Aktualisieren</button>
+        <a
+          href="/api/admin/activity/export"
+          download
+          className="text-sm text-gray-600 border border-gray-300 rounded-lg px-3 py-1 hover:bg-gray-50 transition-colors"
+        >
+          CSV exportieren
+        </a>
       </div>
 
       {loading ? (
