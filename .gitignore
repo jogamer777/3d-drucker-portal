@@ -1,5 +1,7 @@
 # Secrets – niemals committen
 backend/.env
+backend/printer_config.json
+backend/portal_config.json
 
 # Datenbank (enthält Nutzerdaten)
 backend/*.db

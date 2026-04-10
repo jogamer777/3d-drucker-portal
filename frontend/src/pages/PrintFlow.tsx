@@ -158,8 +158,7 @@ export default function PrintFlow() {
       </div>
 
       {/* 2-col layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, alignItems: 'start' }}
-           className="grid-cols-1 md:grid-cols-[1fr_320px]">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-4 items-start">
 
         {/* Left: file list */}
         <div>
@@ -229,6 +228,7 @@ export default function PrintFlow() {
                       borderRadius: 12,
                       border: isSelected ? '2px solid var(--lime)' : '0.5px solid var(--border)',
                       background: isSelected ? 'var(--lime-bg)' : '#fff',
+                      boxShadow: isSelected ? '0 0 0 3px rgba(163,230,53,0.25)' : 'none',
                       cursor: 'pointer',
                       textAlign: 'left',
                       width: '100%',
@@ -240,8 +240,11 @@ export default function PrintFlow() {
                     {f.thumbnail_b64 ? (
                       <img src={f.thumbnail_b64} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, border: '0.5px solid var(--border)', flexShrink: 0 }} />
                     ) : (
-                      <div style={{ width: 44, height: 44, background: 'var(--surface2)', borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--text3)" strokeWidth="1.5"><rect x="4" y="2" width="12" height="16" rx="2" /><path d="M8 6h4M8 9h4M8 12h2" /></svg>
+                      <div style={{ width: 44, height: 44, background: isSelected ? 'var(--lime-bg)' : 'var(--surface2)', borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {isSelected
+                          ? <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--text)' }}>3D</span>
+                          : <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="var(--text3)" strokeWidth="1.5"><rect x="4" y="2" width="12" height="16" rx="2" /><path d="M8 6h4M8 9h4M8 12h2" /></svg>
+                        }
                       </div>
                     )}
 
@@ -259,7 +262,7 @@ export default function PrintFlow() {
 
                     {/* Cost */}
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <p style={{ fontSize: 14, fontWeight: 800, color: cost === 0 ? 'var(--emerald)' : 'var(--text)', margin: 0, fontFamily: 'var(--mono)' }}>
+                      <p style={{ fontSize: 14, fontWeight: 800, color: isSelected ? 'var(--emerald)' : (cost === 0 ? 'var(--emerald)' : 'var(--text)'), margin: 0, fontFamily: 'var(--mono)' }}>
                         {cost === 0 ? 'kostenlos' : `${(cost / 100).toFixed(2)} €`}
                       </p>
                     </div>

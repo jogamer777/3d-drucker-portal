@@ -149,9 +149,10 @@ export default function Layout() {
                 {initial}
               </Link>
 
-              {/* Logout */}
+              {/* Logout — desktop only */}
               <button
                 onClick={handleLogout}
+                className="hidden md:block"
                 style={{
                   fontSize: 13,
                   fontWeight: 600,

@@ -103,13 +103,12 @@ export default function Wallet() {
       </div>
 
       {/* Top grid: balance card + voucher + topup */}
-      <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 12, marginBottom: 12 }}
-           className="grid-cols-1 md:grid-cols-[260px_1fr]">
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-3 mb-3">
 
         {/* Balance card */}
         <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: '24px 20px' }}>
           <p style={{ fontSize: 11, color: 'var(--text3)', margin: '0 0 4px', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.06em' }}>Guthaben</p>
-          <p style={{ fontSize: 48, fontWeight: 900, letterSpacing: '-0.05em', margin: 0, lineHeight: 1.1 }}>
+          <p style={{ fontSize: 'clamp(32px, 8vw, 48px)', fontWeight: 900, letterSpacing: '-0.05em', margin: 0, lineHeight: 1.1 }}>
             {user ? formatBalance(user.balance_cents) : '–'}
           </p>
         </div>

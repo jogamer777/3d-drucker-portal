@@ -1,0 +1,16 @@
+{
+  "portal_url": "https://YOUR_SERVER_IP",
+  "registration": {
+    "open": true
+  },
+  "email": {
+    "enabled": false,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_password": "",
+    "from_address": "",
+    "use_tls": true,
+    "use_ssl": false
+  }
+}

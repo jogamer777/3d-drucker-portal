@@ -36,8 +36,8 @@ export default function AdminPanel() {
     <div>
       <h1 style={{ fontSize: 22, fontWeight: 900, letterSpacing: '-0.04em', margin: '0 0 16px' }}>Admin-Panel</h1>
 
-      {/* Pill tab bar */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, background: 'var(--surface2)', borderRadius: 12, padding: 4, marginBottom: 16 }}>
+      {/* Pill tab bar — horizontal scroll on mobile */}
+      <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 4, background: 'var(--surface2)', borderRadius: 12, padding: 4, marginBottom: 16, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }} className="admin-tabs">
         {TABS.map(([key, label]) => (
           <button
             key={key}

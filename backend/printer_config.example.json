@@ -1,0 +1,6 @@
+{
+  "printer-id": {
+    "api_key": "YOUR_OCTOPRINT_API_KEY",
+    "webcam_path": "/printers/printer-id/webcam"
+  }
+}

@@ -25,6 +25,15 @@ interface PrinterStatus {
   webcam_path?: string | null
   queue_count?: number
   my_queue_position?: number | null
+  filament_type?: string | null
+  temp_hotend?: number | null
+  temp_bed?: number | null
+}
+
+interface PrintRecord {
+  id: number
+  charged_cost_cents: number
+  created_at: string
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -136,9 +145,16 @@ function PrinterCardLarge({ p }: { p: PrinterStatus }) {
         </div>
       )}
 
-      {/* Idle: Jetzt drucken button */}
+      {/* Idle: temp info + Jetzt drucken button */}
       {p.state === 'idle' && (
-        <div style={{ position: 'absolute', bottom: 14, left: 14 }}>
+        <div style={{ position: 'absolute', bottom: 14, left: 14, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+          {(p.filament_type || p.temp_hotend != null || p.temp_bed != null) && (
+            <span style={{ color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--mono)', fontSize: 11 }}>
+              {p.filament_type && <>{p.filament_type} · </>}
+              {p.temp_hotend != null && <>Hotend {Math.round(p.temp_hotend)}°C</>}
+              {p.temp_bed != null && <> · Bett {Math.round(p.temp_bed)}°C</>}
+            </span>
+          )}
           <span style={{
             background: 'var(--lime)',
             color: '#111',
@@ -224,7 +240,14 @@ function PrinterCardSmall({ p }: { p: PrinterStatus }) {
       )}
 
       {p.state === 'idle' && (
-        <div style={{ position: 'absolute', bottom: 12, left: 12 }}>
+        <div style={{ position: 'absolute', bottom: 12, left: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5 }}>
+          {(p.filament_type || p.temp_hotend != null || p.temp_bed != null) && (
+            <span style={{ color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--mono)', fontSize: 10 }}>
+              {p.filament_type && <>{p.filament_type} · </>}
+              {p.temp_hotend != null && <>{Math.round(p.temp_hotend)}°</>}
+              {p.temp_bed != null && <>/{Math.round(p.temp_bed)}°</>}
+            </span>
+          )}
           <span style={{ background: 'var(--lime)', color: '#111', fontWeight: 800, fontSize: 11, borderRadius: 6, padding: '4px 10px' }}>
             Jetzt drucken →
           </span>
@@ -247,6 +270,7 @@ export default function Dashboard() {
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
   const [printers, setPrinters] = useState<PrinterStatus[]>([])
+  const [prints, setPrints] = useState<PrintRecord[]>([])
   const printerInterval = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -261,7 +285,10 @@ export default function Dashboard() {
     const loadPrinters = () =>
       api.get('/printers').then(r => setPrinters(r.data)).catch(() => {})
     loadPrinters()
-    printerInterval.current = setInterval(loadPrinters, 30_000)
+    printerInterval.current = setInterval(loadPrinters, 5_000)
+
+    api.get('/user/prints').then(r => setPrints(r.data)).catch(() => {})
+
     return () => {
       if (printerInterval.current) clearInterval(printerInterval.current)
     }
@@ -289,7 +316,12 @@ export default function Dashboard() {
   }
 
   const [p1, p2, ...rest] = printers
-  const hasQueue = printers.some(p => (p.queue_count ?? 0) > 0 || p.my_queue_position != null)
+
+  // Stat calculations
+  const now = new Date()
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 3600 * 1000)
+  const completedPrints = prints.filter(p => p.charged_cost_cents != null && p.charged_cost_cents > 0)
+  const printsThisMonth = completedPrints.filter(p => new Date(p.created_at) >= monthAgo).length
 
   return (
     <div>
@@ -301,12 +333,11 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Bento Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 300px', gap: 12, marginBottom: 12 }}
-           className="grid-cols-1 md:grid-cols-[1fr_1fr_300px]">
+      {/* Bento Grid — Tailwind-only responsive columns */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_300px] gap-3 mb-3">
 
         {/* Printer 1 — large (col-span-2) */}
-        <div style={{ gridColumn: 'span 2' }} className="col-span-1 md:col-span-2">
+        <div className="col-span-1 md:col-span-2">
           {p1 ? (
             <PrinterCardLarge p={p1} />
           ) : (
@@ -317,8 +348,7 @@ export default function Dashboard() {
         </div>
 
         {/* Queue sidebar — spans 2 rows */}
-        <div style={{ gridRow: 'span 2', borderRadius: 16, background: '#fff', border: '0.5px solid var(--border)', padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}
-             className="hidden md:flex">
+        <div className="hidden md:flex row-span-2" style={{ borderRadius: 16, background: '#fff', border: '0.5px solid var(--border)', padding: 18, flexDirection: 'column', gap: 12 }}>
           <p style={{ fontSize: 13, fontWeight: 800, margin: 0, letterSpacing: '-0.01em' }}>Warteschlange</p>
 
           {printers.length === 0 ? (
@@ -399,31 +429,22 @@ export default function Dashboard() {
         </Link>
       </div>
 
-      {/* Quick actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-        {[
-          { to: '/dateien',  label: 'Dateien',    sub: 'G-Code verwalten'      },
-          { to: '/drucke',   label: 'Druckverlauf', sub: 'Kosten & Geschichte' },
-          { to: '/guthaben', label: 'Guthaben',   sub: 'Aufladen & Verlauf'    },
-          ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin', sub: 'Verwaltung' }] : []),
-        ].map(item => (
-          <Link
-            key={item.to}
-            to={item.to}
-            style={{
-              display: 'block',
-              borderRadius: 14,
-              background: '#fff',
-              border: '0.5px solid var(--border)',
-              padding: '14px 14px 12px',
-              textDecoration: 'none',
-              transition: 'border-color 0.15s',
-            }}
-          >
-            <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{item.label}</p>
-            <p style={{ fontSize: 11, color: 'var(--text3)', margin: '3px 0 0' }}>{item.sub}</p>
-          </Link>
-        ))}
+      {/* Stat-Kacheln */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: '20px 22px', minHeight: 140 }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Filament verbraucht</p>
+          <p style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-0.04em', margin: 0, lineHeight: 1 }}>—</p>
+          <p style={{ fontSize: 12, color: 'var(--text3)', margin: '8px 0 0' }}>diese Woche</p>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 16, border: '0.5px solid var(--border)', padding: '20px 22px', minHeight: 140 }}>
+          <p style={{ fontSize: 11, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Drucke gesamt</p>
+          <p style={{ fontSize: 40, fontWeight: 900, letterSpacing: '-0.04em', margin: 0, lineHeight: 1 }}>
+            {prints.length > 0 ? completedPrints.length : '—'}
+          </p>
+          <p style={{ fontSize: 12, color: 'var(--text3)', margin: '8px 0 0' }}>
+            {prints.length > 0 ? `${printsThisMonth} diesen Monat` : 'diesen Monat'}
+          </p>
+        </div>
       </div>
 
       {/* Admin-Nachrichten Modal */}
