@@ -171,8 +171,8 @@ def _fetch_moonraker(pid: str, cfg: dict) -> dict:
         "temp_bed_target": round(float(bed.get("target", 0)), 1),
         "webcam_path": cfg.get("webcam_path"),
         # Erweiterte Felder für Detail-Seite
-        "layer":              vsd.get("layer") or None,
-        "layer_count":        vsd.get("layer_count") or None,
+        "layer":              ps.get("info", {}).get("current_layer") or None,
+        "layer_count":        ps.get("info", {}).get("total_layer") or None,
         "z_pos":              round(float(ps.get("z_pos", 0)), 2),
         "filament_used_mm":   round(float(ps.get("filament_used", 0)), 1),
         "estimated_end_time": estimated_end_time,
@@ -228,6 +228,25 @@ def _fetch_octoprint(pid: str, cfg: dict) -> dict:
     job_file = job_data.get("job", {}).get("file", {})
     filename = job_file.get("name") or None
 
+    # DisplayLayerProgress-Plugin (optional) für Layer-Tracking
+    layer: Optional[int] = None
+    layer_count: Optional[int] = None
+    try:
+        req3 = urllib.request.Request(
+            f"{base}/api/plugin/DisplayLayerProgress",
+            headers=headers
+        )
+        with urllib.request.urlopen(req3, timeout=2) as resp3:
+            dlp = json.loads(resp3.read())
+        raw_layer = dlp.get("currentLayer") or dlp.get("current_layer")
+        raw_total = dlp.get("layerCount") or dlp.get("layer_count")
+        if raw_layer is not None:
+            layer = int(raw_layer)
+        if raw_total is not None:
+            layer_count = int(raw_total)
+    except Exception:
+        pass  # Plugin nicht installiert — kein Problem
+
     return {
         "id": pid,
         "name": cfg["name"],
@@ -242,8 +261,8 @@ def _fetch_octoprint(pid: str, cfg: dict) -> dict:
         "temp_bed": round(float(bed.get("actual", 0)), 1),
         "temp_bed_target": round(float(bed.get("target", 0)), 1),
         "webcam_path": cfg.get("webcam_path"),
-        "layer": None,
-        "layer_count": None,
+        "layer": layer,
+        "layer_count": layer_count,
         "z_pos": 0.0,
         "filament_used_mm": 0.0,
         "estimated_end_time": None,
