@@ -4,6 +4,7 @@ import api from '../../lib/api'
 interface ReportResponse {
   content: string
   generated_at: string
+  graph_html_exists: boolean
 }
 
 function renderMarkdown(md: string) {
@@ -55,26 +56,82 @@ export default function GraphifyTab() {
   const [report, setReport] = useState<ReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [rendering, setRendering] = useState(false)
+  const [renderMsg, setRenderMsg] = useState('')
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true)
     api.get('/admin/graphify/report')
       .then(r => setReport(r.data))
       .catch(e => setError(e.response?.data?.detail ?? 'Fehler beim Laden'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
+
+  const renderHtml = async () => {
+    setRendering(true)
+    setRenderMsg('')
+    try {
+      const r = await api.post('/admin/graphify/render')
+      setRenderMsg(r.data.message)
+      load()
+    } catch (e: any) {
+      setRenderMsg(e.response?.data?.detail ?? 'Fehler')
+    } finally {
+      setRendering(false)
+    }
+  }
 
   if (loading) return <p style={{ fontSize: 13, color: 'var(--text3)' }}>Lade Graph-Report...</p>
   if (error) return <p style={{ fontSize: 13, color: 'var(--red)' }}>{error}</p>
   if (!report) return null
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h2 style={{ fontSize: 14, fontWeight: 800, margin: 0 }}>Knowledge Graph</h2>
-        <span style={{ fontSize: 11, color: 'var(--text3)' }}>
-          Generiert: {new Date(report.generated_at).toLocaleString('de-DE')}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>
+            Generiert: {new Date(report.generated_at).toLocaleString('de-DE')}
+          </span>
+          <button
+            onClick={renderHtml}
+            disabled={rendering}
+            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 7, cursor: 'pointer', border: '0.5px solid var(--border)', background: 'transparent', color: 'var(--text2)', fontFamily: 'inherit' }}
+          >
+            {rendering ? 'Generiere...' : '↺ HTML neu generieren'}
+          </button>
+        </div>
       </div>
+
+      {renderMsg && <p style={{ fontSize: 11, color: 'var(--text3)' }}>{renderMsg}</p>}
+
+      {/* Interactive Graph iframe */}
+      {report.graph_html_exists ? (
+        <div style={{ border: '0.5px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          <iframe
+            src="/graphify/graph.html"
+            style={{ width: '100%', height: 520, border: 'none', display: 'block' }}
+            title="Knowledge Graph"
+          />
+        </div>
+      ) : (
+        <div style={{ background: 'var(--surface2)', borderRadius: 12, padding: '32px 20px', textAlign: 'center' }}>
+          <p style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 12 }}>Noch keine HTML-Visualisierung vorhanden.</p>
+          <button
+            onClick={renderHtml}
+            disabled={rendering}
+            className="btn-lime"
+            style={{ fontSize: 13, padding: '8px 20px' }}
+          >
+            {rendering ? 'Generiere...' : 'Graph HTML generieren'}
+          </button>
+        </div>
+      )}
+
+      {/* Report Text */}
       <div style={{ background: 'var(--surface2)', borderRadius: 12, padding: '16px 20px' }}>
         {renderMarkdown(report.content)}
       </div>

@@ -735,7 +735,10 @@ def list_messages(
 
 # ── Graphify Knowledge Graph ───────────────────────────────────────────────────
 
-GRAPH_REPORT_PATH = "/home/jf/graphify-out/GRAPH_REPORT.md"
+GRAPH_REPORT_PATH  = "/home/jf/graphify-out/GRAPH_REPORT.md"
+GRAPH_JSON_PATH    = "/home/jf/graphify-out/graph.json"
+GRAPH_HTML_PATH    = "/home/jf/graphify-out/graph.html"
+GRAPH_GEN_SCRIPT   = "/home/jf/graphify-out/generate_html.py"
 
 
 @router.get("/api/admin/graphify/report")
@@ -746,4 +749,22 @@ def get_graph_report(admin: User = Depends(require_admin)):
     with open(GRAPH_REPORT_PATH, "r", encoding="utf-8") as f:
         content = f.read()
     generated_at = datetime.fromtimestamp(os.stat(GRAPH_REPORT_PATH).st_mtime).isoformat()
-    return {"content": content, "generated_at": generated_at}
+    graph_html_exists = os.path.exists(GRAPH_HTML_PATH)
+    return {"content": content, "generated_at": generated_at, "graph_html_exists": graph_html_exists}
+
+
+@router.post("/api/admin/graphify/render")
+def render_graph_html(admin: User = Depends(require_admin)):
+    """Generiert graph.html aus dem bestehenden graph.json (kein LLM-Aufruf)."""
+    if not os.path.exists(GRAPH_JSON_PATH):
+        raise HTTPException(404, "graph.json nicht gefunden.")
+    if not os.path.exists(GRAPH_GEN_SCRIPT):
+        raise HTTPException(404, "generate_html.py nicht gefunden.")
+    import subprocess
+    result = subprocess.run(
+        ["python3", GRAPH_GEN_SCRIPT],
+        capture_output=True, text=True, timeout=30,
+    )
+    if result.returncode != 0:
+        raise HTTPException(500, f"Fehler: {result.stderr[:200]}")
+    return {"ok": True, "message": result.stdout.strip()}
