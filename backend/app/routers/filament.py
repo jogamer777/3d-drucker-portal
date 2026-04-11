@@ -322,11 +322,10 @@ def public_slots(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Gibt Slot-Infos zurück die für die Kostenberechnung relevant sind."""
-    result = {}
+    """Gibt Slot-Infos als flache Liste zurück (alle Drucker, mit printer_id je Slot)."""
+    result = []
     for pid in PRINTERS:
         slot_count = 4 if pid == "k2" else 1
-        slots = []
         for idx in range(slot_count):
             slot = db.query(PrinterSlot).filter(
                 PrinterSlot.printer_id == pid,
@@ -339,7 +338,8 @@ def public_slots(
                     and slot.initial_weight_g
                     and slot.remaining_weight_g <= (slot.initial_weight_g * 0.10)
                 )
-                slots.append({
+                result.append({
+                    "printer_id": pid,
                     "slot_index": idx,
                     "filament_name": ft.name,
                     "material": ft.material.value,
@@ -351,7 +351,6 @@ def public_slots(
                     "remaining_weight_g": slot.remaining_weight_g,
                     "initial_weight_g": slot.initial_weight_g,
                     "low_spool": low_spool,
-                    # Feature B: Druckparameter
                     "print_temp_min": ft.print_temp_min,
                     "print_temp_max": ft.print_temp_max,
                     "bed_temp": ft.bed_temp,
@@ -360,7 +359,8 @@ def public_slots(
                     "notes": ft.notes,
                 })
             else:
-                slots.append({
+                result.append({
+                    "printer_id": pid,
                     "slot_index": idx,
                     "filament_name": None,
                     "material": None,
@@ -377,5 +377,4 @@ def public_slots(
                     "print_speed_mms": None,
                     "notes": None,
                 })
-        result[pid] = slots
     return result

@@ -8,13 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.gcode_parser import parse_gcode
-from app.models.models import GCodeFile, ActivityLog, User
+from app.models.models import GCodeFile, ActivityLog, User, SlicerProfile
 from app.schemas.schemas import GCodeFileOut, StorageInfo, FavoriteToggle
 from app.routers.user import get_current_user
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
-UPLOAD_ROOT = "/home/fj/3d-drucker-portal/uploads"
+UPLOAD_ROOT = "/home/jf/3d-drucker-portal/uploads"
 ALLOWED_EXTENSIONS = {".gcode", ".gco"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
 
@@ -37,6 +37,10 @@ def list_files(
     files = q.order_by(GCodeFile.uploaded_at.desc()).all()
     result = []
     for f in files:
+        profile_name = None
+        if f.slicer_profile_id:
+            sp = db.query(SlicerProfile).filter(SlicerProfile.id == f.slicer_profile_id).first()
+            profile_name = sp.name if sp else None
         out = GCodeFileOut(
             id=f.id,
             filename=f.filename,
@@ -46,6 +50,8 @@ def list_files(
             thumbnail_b64=f.thumbnail_b64,
             profile_signature=f.profile_signature,
             is_favorite=bool(f.is_favorite),
+            slicer_profile_id=f.slicer_profile_id,
+            slicer_profile_name=profile_name,
             uploaded_at=f.uploaded_at,
         )
         result.append(out)
@@ -143,6 +149,25 @@ async def upload_file(
     db.commit()
     db.refresh(gfile)
 
+    # Fingerprint-Erkennung: erste 100 Zeilen nach "; PORTAL-PROFIL: <fp>" scannen
+    profile_name = None
+    try:
+        with open(filepath, 'r', errors='ignore') as _f:
+            for i, line in enumerate(_f):
+                if i >= 100:
+                    break
+                line = line.strip()
+                if line.startswith('; PORTAL-PROFIL:'):
+                    fp = line.split(':', 1)[1].strip()
+                    matched = db.query(SlicerProfile).filter(SlicerProfile.fingerprint == fp).first()
+                    if matched:
+                        gfile.slicer_profile_id = matched.id
+                        profile_name = matched.name
+                        db.commit()
+                    break
+    except Exception:
+        pass
+
     return GCodeFileOut(
         id=gfile.id,
         filename=gfile.filename,
@@ -152,6 +177,8 @@ async def upload_file(
         thumbnail_b64=gfile.thumbnail_b64,
         profile_signature=gfile.profile_signature,
         is_favorite=False,
+        slicer_profile_id=gfile.slicer_profile_id,
+        slicer_profile_name=profile_name,
         uploaded_at=gfile.uploaded_at,
     )
 

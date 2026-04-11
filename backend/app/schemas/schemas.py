@@ -235,6 +235,8 @@ class GCodeFileOut(BaseModel):
     thumbnail_b64: Optional[str]
     profile_signature: Optional[str]
     is_favorite: bool = False
+    slicer_profile_id: Optional[int] = None
+    slicer_profile_name: Optional[str] = None
     uploaded_at: datetime
 
     class Config:
@@ -253,6 +255,7 @@ class SlicerProfileOut(BaseModel):
     slicer_type: str
     filename_orig: str
     size_bytes: int
+    fingerprint: Optional[str] = None
     created_at: datetime
 
     class Config:

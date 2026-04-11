@@ -338,11 +338,10 @@ export default function PrinterDetail() {
       </div>
 
       {/* 2-column layout */}
-      <div style={{ display: 'grid', gap: 14, alignItems: 'start' }}
-           className="grid-cols-1 md:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_360px] gap-[14px] items-start">
 
         {/* LEFT: Webcam + progress + details */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="order-2 md:order-1" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* Webcam card */}
           <div style={{ borderRadius: 16, overflow: 'hidden', border: '0.5px solid var(--border)', background: '#111', position: 'relative' }}>
@@ -470,7 +469,7 @@ export default function PrinterDetail() {
         </div>
 
         {/* RIGHT: Status + actions + sidebar */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="order-1 md:order-2" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* "Du bist dran!" Banner */}
           {notified && (

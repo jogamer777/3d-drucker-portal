@@ -78,14 +78,40 @@ def _run_migrations():
         "ALTER TABLE filament_types ADD COLUMN cooling_percent INTEGER",
         "ALTER TABLE filament_types ADD COLUMN print_speed_mms INTEGER",
         "ALTER TABLE filament_types ADD COLUMN notes TEXT",
+        # Slicer-Profil Fingerprint
+        "ALTER TABLE slicer_profiles ADD COLUMN fingerprint VARCHAR",
+        # G-Code Datei → Slicer-Profil Verknüpfung
+        "ALTER TABLE gcode_files ADD COLUMN slicer_profile_id INTEGER REFERENCES slicer_profiles(id)",
     ]
     for sql in migrations:
         try:
-            with engine.connect() as conn:
+            with engine.begin() as conn:
                 conn.execute(text(sql))
-                conn.commit()
         except Exception:
             pass  # Spalte existiert bereits
+
+    # Dateipfade von /home/fj/ auf /home/jf/ migrieren
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text(
+                "UPDATE gcode_files SET filepath = REPLACE(filepath, '/home/fj/', '/home/jf/') "
+                "WHERE filepath LIKE '/home/fj/%'"
+            ))
+            if result.rowcount > 0:
+                print(f"[migration] Updated {result.rowcount} file paths from /home/fj/ to /home/jf/")
+    except Exception:
+        pass
+
+    # Fingerprints für bestehende Slicer-Profile generieren
+    import uuid as _uuid
+    from app.models.models import SlicerProfile
+    with SessionLocal() as db:
+        profiles_without_fp = db.query(SlicerProfile).filter(SlicerProfile.fingerprint == None).all()
+        for p in profiles_without_fp:
+            p.fingerprint = "PORTAL-" + _uuid.uuid4().hex[:8].upper()
+        if profiles_without_fp:
+            db.commit()
+            print(f"[migration] Generated fingerprints for {len(profiles_without_fp)} slicer profiles")
 
 
 @app.on_event("startup")

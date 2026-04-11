@@ -132,6 +132,7 @@ class GCodeFile(Base):
     thumbnail_b64 = Column(Text, nullable=True)      # data:image/png;base64,...
     profile_signature = Column(String, nullable=True)
     is_favorite = Column(Boolean, default=False, nullable=False, server_default='0')
+    slicer_profile_id = Column(Integer, ForeignKey("slicer_profiles.id"), nullable=True)
     uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     user = relationship("User", back_populates="files")
@@ -305,5 +306,7 @@ class SlicerProfile(Base):
     size_bytes      = Column(Integer, nullable=False)
     uploaded_by_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at      = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    fingerprint    = Column(String, unique=True, nullable=True)   # "PORTAL-XXXXXXXX" für G-Code Erkennung
 
     uploaded_by = relationship("User", foreign_keys=[uploaded_by_id])

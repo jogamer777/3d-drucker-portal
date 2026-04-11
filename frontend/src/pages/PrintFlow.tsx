@@ -10,6 +10,8 @@ interface GCodeFileInfo {
   filament_usage: string | null
   thumbnail_b64: string | null
   size_bytes: number
+  slicer_profile_id: number | null
+  slicer_profile_name: string | null
 }
 
 const RATE_PER_HOUR_CENTS = 20
@@ -253,6 +255,11 @@ export default function PrintFlow() {
                       <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {f.filename}
                       </p>
+                      {f.slicer_profile_name && (
+                        <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600, marginTop: 2, display: 'inline-block' }}>
+                          {f.slicer_profile_name}
+                        </span>
+                      )}
                       <p style={{ fontSize: 11, color: 'var(--text2)', margin: '3px 0 0', fontFamily: 'var(--mono)' }}>
                         {formatDuration(f.duration_seconds)}
                         {grams > 0 && <> · {grams.toFixed(1)} g</>}

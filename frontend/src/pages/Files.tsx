@@ -11,6 +11,8 @@ interface GCodeFile {
   thumbnail_b64: string | null
   profile_signature: string | null
   is_favorite: boolean
+  slicer_profile_id: number | null
+  slicer_profile_name: string | null
   uploaded_at: string
 }
 
@@ -237,6 +239,11 @@ export default function Files() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                     <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.filename}</p>
+                    {f.slicer_profile_name && (
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'var(--blue-bg)', color: 'var(--blue)', fontWeight: 600, flexShrink: 0 }}>
+                        {f.slicer_profile_name}
+                      </span>
+                    )}
                     {f.profile_signature ? (
                       <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 5, background: 'var(--emerald-bg)', color: 'var(--emerald)', fontWeight: 700, flexShrink: 0 }}>
                         ✓ {f.profile_signature}

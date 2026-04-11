@@ -14,8 +14,8 @@ from app.routers.user import get_current_user
 
 router = APIRouter(tags=["slicer-profiles"])
 
-PROFILES_DIR = "/home/fj/3d-drucker-portal/uploads/slicer-profiles"
-ALLOWED_EXTENSIONS = {".ini", ".json", ".toml", ".3mf", ".zip", ".cfg", ".creality_slicer"}
+PROFILES_DIR = "/home/jf/3d-drucker-portal/uploads/slicer-profiles"
+ALLOWED_EXTENSIONS = {".ini", ".json", ".toml", ".3mf", ".zip", ".cfg", ".creality_slicer", ".creality_printer"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
@@ -79,6 +79,9 @@ async def upload_profile(
     with open(filepath, "wb") as f_out:
         f_out.write(content)
 
+    import uuid as _uuid
+    fingerprint = "PORTAL-" + _uuid.uuid4().hex[:8].upper()
+
     profile = SlicerProfile(
         name=name,
         description=description or None,
@@ -89,6 +92,7 @@ async def upload_profile(
         size_bytes=len(content),
         uploaded_by_id=current_user.id,
         created_at=datetime.utcnow(),
+        fingerprint=fingerprint,
     )
     db.add(profile)
     db.commit()

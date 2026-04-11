@@ -9,6 +9,7 @@ interface SlicerProfile {
   slicer_type: string
   filename_orig: string
   size_bytes: number
+  fingerprint: string | null
   created_at: string
 }
 
@@ -132,7 +133,7 @@ export default function SlicerProfilesTab() {
           <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '2px solid var(--text)', background: 'var(--surface2)' }}>
-                {['Name', 'Drucker', 'Slicer', 'Datei', 'Größe', 'Datum', ''].map(h => (
+                {['Name', 'Drucker', 'Slicer', 'Datei', 'Fingerprint', 'Größe', 'Datum', ''].map(h => (
                   <th key={h} style={{ textAlign: 'left', padding: '9px 12px', fontSize: 10, fontWeight: 800, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                 ))}
               </tr>
@@ -155,6 +156,17 @@ export default function SlicerProfilesTab() {
                     </span>
                   </td>
                   <td style={{ padding: '8px 12px', color: 'var(--text2)', fontSize: 11, fontFamily: 'var(--mono)' }}>{p.filename_orig}</td>
+                  <td style={{ padding: '8px 12px' }}>
+                    {p.fingerprint ? (
+                      <code
+                        onClick={() => navigator.clipboard.writeText(`; PORTAL-PROFIL: ${p.fingerprint}`)}
+                        title="Klicken zum Kopieren (in Start-G-Code einfügen)"
+                        style={{ fontSize: 10, fontFamily: 'var(--mono)', background: 'var(--surface2)', padding: '2px 6px', borderRadius: 4, cursor: 'pointer', color: 'var(--text2)' }}
+                      >
+                        {p.fingerprint}
+                      </code>
+                    ) : '—'}
+                  </td>
                   <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12 }}>{formatBytes(p.size_bytes)}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--text3)', fontSize: 12 }}>{formatDate(p.created_at)}</td>
                   <td style={{ padding: '8px 12px' }}>
@@ -221,13 +233,13 @@ export default function SlicerProfilesTab() {
                   {file ? (
                     <p style={{ fontSize: 13, color: 'var(--text)', margin: 0, fontWeight: 600 }}>{file.name}</p>
                   ) : (
-                    <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>.ini, .json, .toml, .3mf, .zip, .cfg, .creality_slicer</p>
+                    <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>.ini, .json, .toml, .3mf, .zip, .cfg, .creality_slicer, .creality_printer</p>
                   )}
                 </div>
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".ini,.json,.toml,.3mf,.zip,.cfg,.creality_slicer"
+                  accept=".ini,.json,.toml,.3mf,.zip,.cfg,.creality_slicer,.creality_printer"
                   className="hidden"
                   onChange={e => setFile(e.target.files?.[0] ?? null)}
                 />
