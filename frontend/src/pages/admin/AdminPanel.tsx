@@ -11,8 +11,9 @@ import EmailConfigTab from './EmailConfigTab'
 import PortalSettingsTab from './PortalSettingsTab'
 import FilamentTab from './FilamentTab'
 import SlicerProfilesTab from './SlicerProfilesTab'
+import GraphifyTab from './GraphifyTab'
 
-type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'filament' | 'profiles' | 'email' | 'settings'
+type Tab = 'stats' | 'users' | 'vouchers' | 'topup' | 'transactions' | 'activity' | 'files' | 'printers' | 'filament' | 'profiles' | 'email' | 'settings' | 'graphify'
 
 const TABS: [Tab, string][] = [
   ['stats',        'Statistik'     ],
@@ -27,6 +28,7 @@ const TABS: [Tab, string][] = [
   ['profiles',     'Slicer-Profile'],
   ['email',        'E-Mail'        ],
   ['settings',     'Einstellungen' ],
+  ['graphify',     'Graph'         ],
 ]
 
 export default function AdminPanel() {
@@ -74,6 +76,7 @@ export default function AdminPanel() {
         {tab === 'profiles'     && <SlicerProfilesTab />}
         {tab === 'email'        && <EmailConfigTab />}
         {tab === 'settings'     && <PortalSettingsTab />}
+        {tab === 'graphify'     && <GraphifyTab />}
       </div>
     </div>
   )

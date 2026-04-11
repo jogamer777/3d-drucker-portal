@@ -731,3 +731,19 @@ def list_messages(
             replied_at=m.replied_at,
         ))
     return result
+
+
+# ── Graphify Knowledge Graph ───────────────────────────────────────────────────
+
+GRAPH_REPORT_PATH = "/home/jf/graphify-out/GRAPH_REPORT.md"
+
+
+@router.get("/api/admin/graphify/report")
+def get_graph_report(admin: User = Depends(require_admin)):
+    """Gibt den Graphify GRAPH_REPORT.md Inhalt zurück."""
+    if not os.path.exists(GRAPH_REPORT_PATH):
+        raise HTTPException(404, "Kein Graph-Report gefunden. Bitte graphify neu ausführen.")
+    with open(GRAPH_REPORT_PATH, "r", encoding="utf-8") as f:
+        content = f.read()
+    generated_at = datetime.fromtimestamp(os.stat(GRAPH_REPORT_PATH).st_mtime).isoformat()
+    return {"content": content, "generated_at": generated_at}

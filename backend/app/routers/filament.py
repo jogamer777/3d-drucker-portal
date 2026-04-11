@@ -63,6 +63,10 @@ class SlotAssign(BaseModel):
     initial_weight_g: Optional[int] = None   # Standard = weight_per_spool_g
 
 
+class RemainingUpdate(BaseModel):
+    remaining_weight_g: int
+
+
 def _price_per_gram(ft: FilamentType) -> int:
     """Berechnet Preis pro Gramm in Cent (gerundet nach oben)."""
     return math.ceil(
@@ -310,6 +314,33 @@ def new_spool(
     if ft.stock_count > 0:
         ft.stock_count -= 1
 
+    db.commit()
+    db.refresh(slot)
+    return _slot_out(slot)
+
+
+@router.patch("/api/admin/filament/slots/{printer_id}/{slot_index}/remaining")
+def update_remaining(
+    printer_id: str,
+    slot_index: int,
+    data: RemainingUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Restbestand manuell anpassen (z.B. nach Wägung)."""
+    slot = db.query(PrinterSlot).filter(
+        PrinterSlot.printer_id == printer_id,
+        PrinterSlot.slot_index == slot_index,
+    ).first()
+    if not slot:
+        raise HTTPException(404, "Slot nicht gefunden")
+    if slot.filament_type_id is None:
+        raise HTTPException(400, "Kein Filament-Typ diesem Slot zugewiesen")
+    if data.remaining_weight_g < 0:
+        raise HTTPException(400, "Restbestand darf nicht negativ sein")
+    if slot.initial_weight_g and data.remaining_weight_g > slot.initial_weight_g:
+        raise HTTPException(400, f"Restbestand darf nicht größer als Startgewicht ({slot.initial_weight_g} g) sein")
+    slot.remaining_weight_g = data.remaining_weight_g
     db.commit()
     db.refresh(slot)
     return _slot_out(slot)

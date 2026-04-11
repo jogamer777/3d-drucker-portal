@@ -277,6 +277,8 @@ function SlotCard({
   )
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [editingWeight, setEditingWeight] = useState(false)
+  const [weightInput, setWeightInput] = useState('')
 
   const pct = slot.remaining_weight_g && slot.initial_weight_g
     ? Math.round((slot.remaining_weight_g / slot.initial_weight_g) * 100)
@@ -290,6 +292,24 @@ function SlotCard({
         filament_type_id: selectedTypeId ? parseInt(selectedTypeId) : null,
       })
       setAssigning(false)
+      onUpdated()
+    } catch (e: any) {
+      setMsg(e.response?.data?.detail ?? 'Fehler')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const saveWeight = async () => {
+    const val = parseInt(weightInput)
+    if (isNaN(val) || val < 0) { setMsg('Ungültiger Wert'); return }
+    setLoading(true)
+    setMsg('')
+    try {
+      await api.patch(`/admin/filament/slots/${slot.printer_id}/${slot.slot_index}/remaining`, {
+        remaining_weight_g: val,
+      })
+      setEditingWeight(false)
       onUpdated()
     } catch (e: any) {
       setMsg(e.response?.data?.detail ?? 'Fehler')
@@ -337,9 +357,33 @@ function SlotCard({
 
           {pct !== null && (
             <div style={{ marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>
                 <span>Restbestand</span>
-                <span>{slot.remaining_weight_g}g / {slot.initial_weight_g}g ({pct}%)</span>
+                {editingWeight ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input
+                      type="number"
+                      min={0}
+                      max={slot.initial_weight_g ?? undefined}
+                      value={weightInput}
+                      onChange={e => setWeightInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveWeight(); if (e.key === 'Escape') setEditingWeight(false) }}
+                      autoFocus
+                      style={{ width: 64, fontSize: 11, padding: '1px 5px', borderRadius: 5, border: '1px solid var(--lime)', fontFamily: 'inherit', textAlign: 'right' }}
+                    />
+                    <span style={{ fontSize: 11 }}>g</span>
+                    <button onClick={saveWeight} disabled={loading} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, cursor: 'pointer', border: 'none', background: 'var(--lime-dark)', color: '#fff', fontFamily: 'inherit', fontWeight: 700 }}>✓</button>
+                    <button onClick={() => setEditingWeight(false)} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, cursor: 'pointer', border: '0.5px solid var(--border)', background: 'transparent', color: 'var(--text3)', fontFamily: 'inherit' }}>✕</button>
+                  </div>
+                ) : (
+                  <span
+                    onClick={() => { setWeightInput(String(slot.remaining_weight_g ?? 0)); setEditingWeight(true) }}
+                    title="Klicken zum Bearbeiten"
+                    style={{ cursor: 'pointer', borderBottom: '1px dashed var(--text3)' }}
+                  >
+                    {slot.remaining_weight_g}g / {slot.initial_weight_g}g ({pct}%)
+                  </span>
+                )}
               </div>
               <div style={{ width: '100%', background: 'var(--border)', borderRadius: 4, height: 6 }}>
                 <div style={{ height: 6, borderRadius: 4, width: `${pct}%`, background: pct <= 10 ? 'var(--red)' : pct <= 25 ? 'var(--amber)' : 'var(--lime-dark)', transition: 'width 0.3s' }} />
